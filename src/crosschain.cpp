@@ -42,13 +42,15 @@ uint256 CalculateProofRoot(const char* symbol, uint32_t targetCCid, int kmdHeigh
      *        > scan backwards >
      */
 
-    if (targetCCid <= 1)
+    if (targetCCid < 2)
         return uint256();
 
     if (kmdHeight < 0 || kmdHeight > chainActive.Height())
         return uint256();
 
     int seenOwnNotarisations = 0;
+
+    bool txscl = IsTXSCL(symbol);
 
     for (int i=0; i<NOTARISATION_SCAN_LIMIT_BLOCKS; i++) {
         if (i > kmdHeight) break;
@@ -72,8 +74,9 @@ uint256 CalculateProofRoot(const char* symbol, uint32_t targetCCid, int kmdHeigh
 
         if (seenOwnNotarisations == 1) {
             BOOST_FOREACH(Notarisation& nota, notarisations) {
-                if (nota.second.ccId == targetCCid)
-                    moms.push_back(nota.second.MoM);
+                if (IsTXSCL(nota.second.symbol) == txscl)
+                    if (nota.second.ccId == targetCCid)
+                        moms.push_back(nota.second.MoM);
             }
         }
     }
