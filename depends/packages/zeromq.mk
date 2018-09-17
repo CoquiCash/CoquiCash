@@ -1,6 +1,6 @@
 ifeq ($(host_os),mingw32)
 $(package)_version=4.2.2-1
-$(package)_download_path=https://github.com/ca333/libzmq/archive/
+$(package)_download_path=https://github.com/ca333/libzmq/archive
 $(package)_download_file=v$($(package)_version).tar.gz
 $(package)_file_name=libzmq-$($(package)_version).tar.gz
 $(package)_sha256_hash=0e225b85ce11be23bf7eb7d3f25c6686728bf30d5c31f61c12d37bb646c69962
@@ -22,6 +22,7 @@ $(package)_sha256_hash=27d1e82a099228ee85a7ddb2260f40830212402c605a4a10b5e5498a7
 define $(package)_set_vars
   $(package)_config_opts=--without-documentation --disable-shared --disable-curve
   $(package)_config_opts_linux=--with-pic
+  $(package)_cxxflags=-std=c++11
 endef
 endif
 

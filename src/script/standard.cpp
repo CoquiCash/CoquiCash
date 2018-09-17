@@ -9,6 +9,7 @@
 #include "script/script.h"
 #include "util.h"
 #include "utilstrencodings.h"
+#include "script/cc.h"
 
 #include <boost/foreach.hpp>
 
@@ -30,6 +31,8 @@ const char* GetTxnOutputType(txnouttype t)
     case TX_SCRIPTHASH: return "scripthash";
     case TX_MULTISIG: return "multisig";
     case TX_NULL_DATA: return "nulldata";
+    case TX_CRYPTOCONDITION: return "cryptocondition";
+    default: return "invalid";
     }
     return NULL;
 }
@@ -66,6 +69,25 @@ bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, vector<vector<unsi
         vector<unsigned char> hashBytes(scriptPubKey.begin()+2, scriptPubKey.begin()+22);
         vSolutionsRet.push_back(hashBytes);
         return true;
+    }
+
+    if (IsCryptoConditionsEnabled()) {
+        // Shortcut for pay-to-crypto-condition
+        if (scriptPubKey.IsPayToCryptoCondition()) {
+            if (scriptPubKey.MayAcceptCryptoCondition()) {
+                typeRet = TX_CRYPTOCONDITION;
+                vector<unsigned char> hashBytes; uint160 x; int32_t i; uint8_t hash20[20],*ptr;;
+                x = Hash160(scriptPubKey);
+                memcpy(hash20,&x,20);
+                hashBytes.resize(20);
+                ptr = hashBytes.data();
+                for (i=0; i<20; i++)
+                    ptr[i] = hash20[i];
+                vSolutionsRet.push_back(hashBytes);
+                return true;
+            }
+            return false;
+        }
     }
 
     // Scan templates
@@ -145,7 +167,7 @@ bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, vector<vector<unsi
                 // small pushdata, <= nMaxDatacarrierBytes
                 if (vch1.size() > nMaxDatacarrierBytes)
                 {
-                    fprintf(stderr,"size.%d > nMaxDatacarrier.%d\n",(int32_t)vch1.size(),(int32_t)nMaxDatacarrierBytes);
+                    //fprintf(stderr,"size.%d > nMaxDatacarrier.%d\n",(int32_t)vch1.size(),(int32_t)nMaxDatacarrierBytes);
                     break;
                 }
             }
@@ -179,6 +201,8 @@ int ScriptSigArgsExpected(txnouttype t, const std::vector<std::vector<unsigned c
         return vSolutions[0][0] + 1;
     case TX_SCRIPTHASH:
         return 1; // doesn't include args needed by the script
+    case TX_CRYPTOCONDITION:
+        return 1;
     }
     return -1;
 }
@@ -188,10 +212,10 @@ bool IsStandard(const CScript& scriptPubKey, txnouttype& whichType)
     vector<valtype> vSolutions;
     if (!Solver(scriptPubKey, whichType, vSolutions))
     {
-        int32_t i; uint8_t *ptr = (uint8_t *)scriptPubKey.data();
-        for (i=0; i<scriptPubKey.size(); i++)
-            fprintf(stderr,"%02x",ptr[i]);
-        fprintf(stderr," non-standard scriptPubKey\n");
+        //int32_t i; uint8_t *ptr = (uint8_t *)scriptPubKey.data();
+        //for (i=0; i<scriptPubKey.size(); i++)
+        //    fprintf(stderr,"%02x",ptr[i]);
+        //fprintf(stderr," non-standard scriptPubKey\n");
         return false;
     }
 
@@ -237,6 +261,12 @@ bool ExtractDestination(const CScript& scriptPubKey, CTxDestination& addressRet)
         addressRet = CScriptID(uint160(vSolutions[0]));
         return true;
     }
+    
+    else if (IsCryptoConditionsEnabled() != 0 && whichType == TX_CRYPTOCONDITION)
+    {
+        addressRet = CKeyID(uint160(vSolutions[0]));
+        return true;
+    }
     // Multisig txns have more than one address...
     return false;
 }
@@ -274,7 +304,9 @@ bool ExtractDestinations(const CScript& scriptPubKey, txnouttype& typeRet, vecto
         nRequiredRet = 1;
         CTxDestination address;
         if (!ExtractDestination(scriptPubKey, address))
+        {
            return false;
+        }
         addressRet.push_back(address);
     }
 
