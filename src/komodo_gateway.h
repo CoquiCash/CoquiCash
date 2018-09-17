@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright © 2014-2017 The SuperNET Developers.                             *
+ * Copyright © 2014-2018 The SuperNET Developers.                             *
  *                                                                            *
  * See the AUTHORS, DEVELOPER-AGREEMENT and LICENSE files at                  *
  * the top-level directory of this distribution for the individual copyright  *
@@ -405,11 +405,11 @@ static int _paxorder(const void *a,const void *b)
     uint64_t aval,bval;
     aval = pax_a->fiatoshis + pax_a->komodoshis + pax_a->height;
     bval = pax_b->fiatoshis + pax_b->komodoshis + pax_b->height;
-    if ( bval > aval )
-        return(-1);
-    else if ( bval < aval )
-        return(1);
-    return(0);
+	if ( bval > aval )
+		return(-1);
+	else if ( bval < aval )
+		return(1);
+	return(0);
 #undef pax_a
 #undef pax_b
 }
@@ -526,11 +526,11 @@ int32_t komodo_gateway_deposits(CMutableTransaction *txNew,char *base,int32_t to
             continue;
         }
         /*printf("pax.%s marked.%d %.8f -> %.8f ready.%d validated.%d\n",pax->symbol,pax->marked,dstr(pax->komodoshis),dstr(pax->fiatoshis),pax->ready!=0,pax->validated!=0);
-         if ( pax->marked != 0 || (pax->type != 'D' && pax->type != 'A') || pax->ready == 0 )
-         {
-         printf("reject 2\n");
-         continue;
-         }*/
+        if ( pax->marked != 0 || (pax->type != 'D' && pax->type != 'A') || pax->ready == 0 )
+        {
+            printf("reject 2\n");
+            continue;
+        }*/
         if ( ASSETCHAINS_SYMBOL[0] != 0 && (strcmp(pax->symbol,symbol) != 0 || pax->validated == 0 || pax->ready == 0) )
         {
             if ( strcmp(pax->symbol,ASSETCHAINS_SYMBOL) == 0 )
@@ -551,7 +551,7 @@ int32_t komodo_gateway_deposits(CMutableTransaction *txNew,char *base,int32_t to
                 }
             } else continue;
         }
-        
+
         //printf("redeem.%d? (%c) %p pax.%s marked.%d %.8f -> %.8f ready.%d validated.%d approved.%d\n",tokomodo,pax->type,pax,pax->symbol,pax->marked,dstr(pax->komodoshis),dstr(pax->fiatoshis),pax->ready!=0,pax->validated!=0,pax->approved!=0);
         if ( 0 && ASSETCHAINS_SYMBOL[0] != 0 )
             printf("pax.%s marked.%d %.8f -> %.8f\n",ASSETCHAINS_SYMBOL,pax->marked,dstr(pax->komodoshis),dstr(pax->fiatoshis));
@@ -653,7 +653,7 @@ void komodo_passport_iteration();
 int32_t komodo_check_deposit(int32_t height,const CBlock& block,uint32_t prevtime) // verify above block is valid pax pricing
 {
     static uint256 array[64]; static int32_t numbanned,indallvouts;
-    int32_t i,j,k,n,ht,baseid,txn_count,activation,num,opretlen,offset=1,errs=0,notmatched=0,matched=0,kmdheights[256],otherheights[256]; uint256 hash,txids[256]; char symbol[KOMODO_ASSETCHAIN_MAXLEN],base[KOMODO_ASSETCHAIN_MAXLEN]; uint16_t vouts[256]; int8_t baseids[256]; uint8_t *script,opcode,rmd160s[256*20]; uint64_t total,subsidy,available,deposited,issued,withdrawn,approved,redeemed,checktoshis,seed; int64_t values[256],srcvalues[256]; struct pax_transaction *pax; struct komodo_state *sp; CTransaction tx;
+    int32_t i,j,k,n,ht,baseid,txn_count,activation,num,opretlen,offset=1,errs=0,notmatched=0,matched=0,kmdheights[256],otherheights[256]; uint256 hash,txids[256]; char symbol[KOMODO_ASSETCHAIN_MAXLEN],base[KOMODO_ASSETCHAIN_MAXLEN]; uint16_t vouts[256]; int8_t baseids[256]; uint8_t *script,opcode,rmd160s[256*20]; uint64_t total,subsidy,available,deposited,issued,withdrawn,approved,redeemed,seed; int64_t checktoshis,values[256],srcvalues[256]; struct pax_transaction *pax; struct komodo_state *sp; CTransaction tx;
     activation = 235300;
     if ( *(int32_t *)&array[0] == 0 )
         numbanned = komodo_bannedset(&indallvouts,array,(int32_t)(sizeof(array)/sizeof(*array)));
@@ -688,7 +688,7 @@ int32_t komodo_check_deposit(int32_t height,const CBlock& block,uint32_t prevtim
         }
     }
     n = block.vtx[0].vout.size();
-    script = (uint8_t *)block.vtx[0].vout[n-1].scriptPubKey.data();
+    //script = (uint8_t *)block.vtx[0].vout[n-1].scriptPubKey.data();
     //if ( n <= 2 || script[0] != 0x6a )
     {
         int64_t val,prevtotal = 0; int32_t strangeout=0,overflow = 0;
@@ -743,8 +743,23 @@ int32_t komodo_check_deposit(int32_t height,const CBlock& block,uint32_t prevtim
         }
         else
         {
-            if ( overflow != 0 || total > 0 || strangeout != 0 )
+            checktoshis = 0;
+            if ( ASSETCHAINS_COMMISSION != 0 && height > 1 )
             {
+                if ( (checktoshis= komodo_checkcommission((CBlock *)&block,height)) < 0 )
+                {
+                    fprintf(stderr,"ht.%d checktoshis %.8f overflow.%d total %.8f strangeout.%d\n",height,dstr(checktoshis),overflow,dstr(total),strangeout);
+                    return(-1);
+                }
+            }
+            if ( height > 1 && checktoshis == 0 )
+            {
+                checktoshis = ((uint64_t)GetBlockSubsidy(height, Params().GetConsensus()) - block.vtx[0].vout[0].nValue);
+                //checktoshis += txn_count * 0.001; // rely on higher level validations to prevent emitting more coins than actual txfees
+            }
+            if ( height >= 2 && (overflow != 0 || total > checktoshis || strangeout != 0) )
+            {
+                fprintf(stderr,"checkdeposit: ht.%d checktoshis %.8f overflow.%d total %.8f strangeout.%d\n",height,dstr(checktoshis),overflow,dstr(total),strangeout);
                 if ( strangeout != 0 )
                     fprintf(stderr,">>>>>>>>>>>>> %s DUST ht.%d strangout.%d notmatched.%d <<<<<<<<<\n",ASSETCHAINS_SYMBOL,height,strangeout,notmatched);
                 return(-1);
@@ -756,7 +771,7 @@ int32_t komodo_check_deposit(int32_t height,const CBlock& block,uint32_t prevtim
 
 const char *komodo_opreturn(int32_t height,uint64_t value,uint8_t *opretbuf,int32_t opretlen,uint256 txid,uint16_t vout,char *source)
 {
-    uint8_t rmd160[20],rmd160s[64*20],addrtype,shortflag,pubkey33[33]; int32_t didstats,i,j,n,kvheight,len,tokomodo,kmdheight,otherheights[64],kmdheights[64]; int8_t baseids[64]; char base[4],coinaddr[64],destaddr[64]; uint256 txids[64]; uint16_t vouts[64]; uint64_t convtoshis,seed; int64_t fee,fiatoshis,komodoshis,checktoshis,values[64],srcvalues[64]; struct pax_transaction *pax,*pax2; struct komodo_state *basesp; double diff;
+    uint8_t rmd160[20],rmd160s[64*20],addrtype,shortflag,pubkey33[33]; int32_t didstats,i,j,n,kvheight,len,tokomodo,kmdheight,otherheights[64],kmdheights[64]; int8_t baseids[64]; char base[4],coinaddr[64],destaddr[64]; uint256 txids[64]; uint16_t vouts[64]; uint64_t convtoshis,seed; int64_t fee,fiatoshis,komodoshis,checktoshis,values[64],srcvalues[64]; struct pax_transaction *pax,*pax2; struct komodo_state *basesp; double diff; 
     const char *typestr = "unknown";
     if ( ASSETCHAINS_SYMBOL[0] != 0 && komodo_baseid(ASSETCHAINS_SYMBOL) < 0 && opretbuf[0] != 'K' )
     {
@@ -1168,11 +1183,11 @@ void komodo_stateind_set(struct komodo_state *sp,uint32_t *inds,int32_t n,uint8_
     }
     printf("numR.%d numV.%d numN.%d count.%d\n",numR,numV,numN,count);
     /*else if ( func == 'K' ) // KMD height: stop after 1st
-     else if ( func == 'T' ) // KMD height+timestamp: stop after 1st
-     
-     else if ( func == 'N' ) // notarization, scan backwards 1440+ blocks;
-     else if ( func == 'V' ) // price feed: can stop after 1440+
-     else if ( func == 'R' ) // opreturn:*/
+    else if ( func == 'T' ) // KMD height+timestamp: stop after 1st
+        
+    else if ( func == 'N' ) // notarization, scan backwards 1440+ blocks;
+    else if ( func == 'V' ) // price feed: can stop after 1440+
+    else if ( func == 'R' ) // opreturn:*/
 }
 
 void *OS_loadfile(char *fname,uint8_t **bufp,long *lenp,long *allocsizep)
@@ -1349,9 +1364,11 @@ int32_t komodo_faststateinit(struct komodo_state *sp,char *fname,char *symbol,ch
     return(-1);
 }
 
+uint64_t komodo_interestsum();
+
 void komodo_passport_iteration()
 {
-    static long lastpos[34]; static char userpass[33][1024]; static uint32_t lasttime,callcounter;
+    static long lastpos[34]; static char userpass[33][1024]; static uint32_t lasttime,callcounter,lastinterest;
     int32_t maxseconds = 10;
     FILE *fp; uint8_t *filedata; long fpos,datalen,lastfpos; int32_t baseid,limit,n,ht,isrealtime,expired,refid,blocks,longest; struct komodo_state *sp,*refsp; char *retstr,fname[512],*base,symbol[KOMODO_ASSETCHAIN_MAXLEN],dest[KOMODO_ASSETCHAIN_MAXLEN]; uint32_t buf[3],starttime; cJSON *infoobj,*result; uint64_t RTmask = 0;
     expired = 0;
@@ -1359,6 +1376,12 @@ void komodo_passport_iteration()
     {
         fprintf(stderr,"[%s] PASSPORT iteration waiting for KOMODO_INITDONE\n",ASSETCHAINS_SYMBOL);
         sleep(3);
+    }
+    if ( komodo_chainactive_timestamp() > lastinterest )
+    {
+        komodo_interestsum();
+        komodo_longestchain();
+        lastinterest = komodo_chainactive_timestamp();
     }
     refsp = komodo_stateptr(symbol,dest);
     if ( ASSETCHAINS_SYMBOL[0] == 0 )
@@ -1378,10 +1401,10 @@ void komodo_passport_iteration()
         }
     }
     /*if ( KOMODO_PAX == 0 )
-     {
-     KOMODO_PASSPORT_INITDONE = 1;
-     return;
-     }*/
+    {
+        KOMODO_PASSPORT_INITDONE = 1;
+        return;
+    }*/
     starttime = (uint32_t)time(NULL);
     if ( callcounter++ < 1 )
         limit = 10000;
@@ -1468,7 +1491,7 @@ void komodo_passport_iteration()
             komodo_statefname(fname,baseid<32?base:(char *)"",(char *)"realtime");
             if ( (fp= fopen(fname,"wb")) != 0 )
             {
-                buf[0] = (uint32_t)chainActive.Tip()->nHeight;
+                buf[0] = (uint32_t)chainActive.LastTip()->nHeight;
                 buf[1] = (uint32_t)komodo_longestchain();
                 if ( buf[0] != 0 && buf[0] == buf[1] )
                 {
@@ -1486,12 +1509,12 @@ void komodo_passport_iteration()
         if ( sp != 0 && isrealtime == 0 )
             refsp->RTbufs[0][2] = 0;
     }
-    komodo_paxtotal();
+    //komodo_paxtotal(); // calls komodo_isrealtime(), which calls komodo_longestchain()
     refsp->RTmask |= RTmask;
     if ( expired == 0 && KOMODO_PASSPORT_INITDONE == 0 )
     {
         KOMODO_PASSPORT_INITDONE = 1;
-        printf("READY for  RPC calls at %u! done PASSPORT %s refid.%d\n",(uint32_t)time(NULL),ASSETCHAINS_SYMBOL,refid);
+        printf("READY for %s RPC calls at %u! done PASSPORT %s refid.%d\n",ASSETCHAINS_SYMBOL,(uint32_t)time(NULL),ASSETCHAINS_SYMBOL,refid);
     }
 }
 
