@@ -7,7 +7,8 @@ src/zcash-cli
 src/zcash-gtest
 src/zcash-tx
 src/test/test_bitcoin
-
+src/coquid
+src/coqui-cli
 
 # Zcash utilities
 src/zcash/GenerateParams
