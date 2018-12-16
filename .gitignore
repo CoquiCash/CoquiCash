@@ -1,6 +1,5 @@
 *.tar.gz
 *.deb
-*.exe
 src/bitcoin
 src/zcashd
 src/zcash-cli
@@ -9,10 +8,6 @@ src/zcash-tx
 src/test/test_bitcoin
 src/coquid
 src/coqui-cli
-
-# Zcash utilities
-src/zcash/GenerateParams
-src/zcash/CreateJoinSplit
 
 *zcashTest.pk
 *zcashTest.vk
@@ -49,6 +44,7 @@ src/univalue/gen
 
 .deps
 .dirstamp
+.idea
 .libs
 .*.swp
 *.*~*
@@ -123,3 +119,10 @@ src/komodod
 src/komodo-tx
 src/komodo-test
 src/wallet-utility
+src/komodo-cli.exe
+src/komodod.exe
+src/komodo-tx.exe
+
+#output during builds, symbol tables?
+*.dSYM
+
