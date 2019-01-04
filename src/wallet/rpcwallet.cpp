@@ -4113,6 +4113,9 @@ UniValue z_sendmany(const UniValue& params, bool fHelp)
                     if ( fromSprout || toSprout )
                         throw JSONRPCError(RPC_INVALID_PARAMETER,"Sprout usage has expired");
                 }
+                if ( toSapling && ASSETCHAINS_SYMBOL[0] == 0 )
+                    throw JSONRPCError(RPC_INVALID_PARAMETER,"Sprout usage will expire soon");
+   
                 // If we are sending from a shielded address, all recipient
                 // shielded addresses must be of the same type.
                 if ((fromSprout && toSapling) || (fromSapling && toSprout)) {
@@ -4786,9 +4789,11 @@ UniValue z_mergetoaddress(const UniValue& params, bool fHelp)
     if (useAnySprout || useAnySapling || zaddrs.size() > 0) {
         // Get available notes
         std::vector<CSproutNotePlaintextEntry> sproutEntries;
-        std::vector<SaplingNoteEntry> saplingEntries;
-        pwalletMain->GetFilteredNotes(sproutEntries, saplingEntries, zaddrs);
-        
+        //std::vector<SaplingNoteEntry> saplingEntries;
+        //pwalletMain->GetFilteredNotes(sproutEntries, saplingEntries, zaddrs);
+        std::vector<SaplingNoteEntry> saplingEntries,skipsapling;
+        pwalletMain->GetFilteredNotes(sproutEntries, useAnySprout == 0 ? saplingEntries : skipsapling, zaddrs);
+       
         // If Sapling is not active, do not allow sending from a sapling addresses.
         if (!saplingActive && saplingEntries.size() > 0) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, Sapling has not activated");
