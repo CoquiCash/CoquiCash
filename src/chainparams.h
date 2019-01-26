@@ -3,11 +3,25 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+/******************************************************************************
+ * Copyright © 2014-2019 The SuperNET Developers.                             *
+ *                                                                            *
+ * See the AUTHORS, DEVELOPER-AGREEMENT and LICENSE files at                  *
+ * the top-level directory of this distribution for the individual copyright  *
+ * holder information and the developer policies on copyright and licensing.  *
+ *                                                                            *
+ * Unless otherwise agreed in a custom licensing agreement, no part of the    *
+ * SuperNET software, including this file may be copied, modified, propagated *
+ * or distributed except according to the terms contained in the LICENSE file *
+ *                                                                            *
+ * Removal or modification of this copyright notice is prohibited.            *
+ *                                                                            *
+ ******************************************************************************/
+
 #ifndef BITCOIN_CHAINPARAMS_H
 #define BITCOIN_CHAINPARAMS_H
 
 #include "chainparamsbase.h"
-#include "checkpoints.h"
 #include "consensus/params.h"
 #include "primitives/block.h"
 #include "protocol.h"
@@ -25,6 +39,8 @@ struct SeedSpec6 {
     uint8_t addr[16];
     uint16_t port;
 };
+
+typedef std::map<int, uint256> MapCheckpoints;
 
 
 /**
@@ -46,8 +62,24 @@ public:
 
         ZCPAYMENT_ADDRRESS,
         ZCSPENDING_KEY,
+        ZCVIEWING_KEY,
 
         MAX_BASE58_TYPES
+    };
+    struct CCheckpointData {
+        MapCheckpoints mapCheckpoints;
+        int64_t nTimeLastCheckpoint;
+        int64_t nTransactionsLastCheckpoint;
+        double fTransactionsPerDay;
+    };
+
+    enum Bech32Type {
+        SAPLING_PAYMENT_ADDRESS,
+        SAPLING_FULL_VIEWING_KEY,
+        SAPLING_INCOMING_VIEWING_KEY,
+        SAPLING_EXTENDED_SPEND_KEY,
+
+        MAX_BECH32_TYPES
     };
 
     const Consensus::Params& GetConsensus() const { return consensus; }
@@ -55,8 +87,6 @@ public:
     const std::vector<unsigned char>& AlertKey() const { return vAlertPubKey; }
     int GetDefaultPort() const { return nDefaultPort; }
 
-    /** Used if GenerateBitcoins is called with a negative number of threads */
-    int DefaultMinerThreads() const { return nMinerThreads; }
     const CBlock& GenesisBlock() const { return genesis; }
     /** Make miner wait to have peers to avoid wasting work */
     bool MiningRequiresPeers() const { return fMiningRequiresPeers; }
@@ -64,11 +94,11 @@ public:
     bool DefaultConsistencyChecks() const { return fDefaultConsistencyChecks; }
     /** Policy: Filter transactions that do not match well-defined patterns */
     bool RequireStandard() const { return fRequireStandard; }
-    int64_t MaxTipAge() const { return nMaxTipAge; }
     int64_t PruneAfterHeight() const { return nPruneAfterHeight; }
     unsigned int EquihashN() const { return nEquihashN; }
     unsigned int EquihashK() const { return nEquihashK; }
     std::string CurrencyUnits() const { return strCurrencyUnits; }
+    uint32_t BIP44CoinType() const { return bip44CoinType; }
     /** Make miner stop after a block is found. In RPC, don't return until nGenProcLimit blocks are generated */
     bool MineBlocksOnDemand() const { return fMineBlocksOnDemand; }
     /** In the future use NetworkIDString() for RPC fields */
@@ -77,8 +107,9 @@ public:
     std::string NetworkIDString() const { return strNetworkID; }
     const std::vector<CDNSSeedData>& DNSSeeds() const { return vSeeds; }
     const std::vector<unsigned char>& Base58Prefix(Base58Type type) const { return base58Prefixes[type]; }
+    const std::string& Bech32HRP(Bech32Type type) const { return bech32HRPs[type]; }
     const std::vector<SeedSpec6>& FixedSeeds() const { return vFixedSeeds; }
-    const Checkpoints::CCheckpointData& Checkpoints() const { return checkpointData; }
+    const CCheckpointData& Checkpoints() const { return checkpointData; }
     /** Return the founder's reward address and script for a given block height */
     std::string GetFoundersRewardAddressAtHeight(int height) const;
     CScript GetFoundersRewardScriptAtHeight(int height) const;
@@ -87,13 +118,12 @@ public:
     void SetRegTestCoinbaseMustBeProtected() { consensus.fCoinbaseMustBeProtected = true; }
 
     void SetDefaultPort(uint16_t port) { nDefaultPort = port; }
-    void SetCheckpointData(Checkpoints::CCheckpointData checkpointData);
+    void SetCheckpointData(CCheckpointData checkpointData);
 
     //void setnonce(uint32_t nonce) { memcpy(&genesis.nNonce,&nonce,sizeof(nonce)); }
     //void settimestamp(uint32_t timestamp) { genesis.nTime = timestamp; }
     //void setgenesis(CBlock &block) { genesis = block; }
     //void recalc_genesis(uint32_t nonce) { genesis = CreateGenesisBlock(ASSETCHAINS_TIMESTAMP, nonce, GENESIS_NBITS, 1, COIN); };
-    int nDefaultPort = 0;
     CMessageHeader::MessageStartChars pchMessageStart; // jl777 moved
     Consensus::Params consensus;
 
@@ -104,13 +134,16 @@ protected:
     std::vector<unsigned char> vAlertPubKey;
     int nMinerThreads = 0;
     long nMaxTipAge = 0;
+    int nDefaultPort = 0;
     uint64_t nPruneAfterHeight = 0;
     unsigned int nEquihashN = 0;
     unsigned int nEquihashK = 0;
     std::vector<CDNSSeedData> vSeeds;
     std::vector<unsigned char> base58Prefixes[MAX_BASE58_TYPES];
+    std::string bech32HRPs[MAX_BECH32_TYPES];
     std::string strNetworkID;
     std::string strCurrencyUnits;
+    uint32_t bip44CoinType;
     CBlock genesis;
     std::vector<SeedSpec6> vFixedSeeds;
     bool fMiningRequiresPeers = false;
@@ -118,7 +151,7 @@ protected:
     bool fRequireStandard = false;
     bool fMineBlocksOnDemand = false;
     bool fTestnetToBeDeprecatedFieldRPC = false;
-    Checkpoints::CCheckpointData checkpointData;
+    CCheckpointData checkpointData;
     std::vector<std::string> vFoundersRewardAddress;
 };
 
@@ -139,5 +172,10 @@ void SelectParams(CBaseChainParams::Network network);
  * Returns false if an invalid combination is given.
  */
 bool SelectParamsFromCommandLine();
+
+/**
+ * Allows modifying the network upgrade regtest parameters.
+ */
+void UpdateNetworkUpgradeParameters(Consensus::UpgradeIndex idx, int nActivationHeight);
 
 #endif // BITCOIN_CHAINPARAMS_H

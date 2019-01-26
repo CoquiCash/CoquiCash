@@ -3,6 +3,21 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+/******************************************************************************
+ * Copyright © 2014-2019 The SuperNET Developers.                             *
+ *                                                                            *
+ * See the AUTHORS, DEVELOPER-AGREEMENT and LICENSE files at                  *
+ * the top-level directory of this distribution for the individual copyright  *
+ * holder information and the developer policies on copyright and licensing.  *
+ *                                                                            *
+ * Unless otherwise agreed in a custom licensing agreement, no part of the    *
+ * SuperNET software, including this file may be copied, modified, propagated *
+ * or distributed except according to the terms contained in the LICENSE file *
+ *                                                                            *
+ * Removal or modification of this copyright notice is prohibited.            *
+ *                                                                            *
+ ******************************************************************************/
+
 /**
  * Why base-58 instead of standard base-64 encoding?
  * - Don't want 0OIl characters that look the same in some fonts and
@@ -58,13 +73,13 @@ std::string EncodeBase58Check(const std::vector<unsigned char>& vchIn);
  * Decode a base58-encoded string (psz) that includes a checksum into a byte
  * vector (vchRet), return true if decoding is successful
  */
-inline bool DecodeBase58Check(const char* psz, std::vector<unsigned char>& vchRet);
+bool DecodeBase58Check(const char* psz, std::vector<unsigned char>& vchRet);
 
 /**
  * Decode a base58-encoded string (str) that includes a checksum into a byte
  * vector (vchRet), return true if decoding is successful
  */
-inline bool DecodeBase58Check(const std::string& str, std::vector<unsigned char>& vchRet);
+bool DecodeBase58Check(const std::string& str, std::vector<unsigned char>& vchRet);
 
 /**
  * Base class for all base58-encoded data
@@ -96,26 +111,15 @@ public:
     bool operator> (const CBase58Data& b58) const { return CompareTo(b58) >  0; }
 };
 
-class CZCPaymentAddress : public CBase58Data {
+template<class DATA_TYPE, CChainParams::Base58Type PREFIX, size_t SER_SIZE>
+class CZCEncoding : public CBase58Data {
+protected:
+    virtual std::string PrependName(const std::string& s) const = 0;
+
 public:
-    bool Set(const libzcash::PaymentAddress& addr);
-    CZCPaymentAddress() {}
+    bool Set(const DATA_TYPE& addr);
 
-    CZCPaymentAddress(const std::string& strAddress) { SetString(strAddress.c_str(), 2); }
-    CZCPaymentAddress(const libzcash::PaymentAddress& addr) { Set(addr); }
-
-    libzcash::PaymentAddress Get() const;
-};
-
-class CZCSpendingKey : public CBase58Data {
-public:
-    bool Set(const libzcash::SpendingKey& addr);
-    CZCSpendingKey() {}
-
-    CZCSpendingKey(const std::string& strAddress) { SetString(strAddress.c_str(), 2); }
-    CZCSpendingKey(const libzcash::SpendingKey& addr) { Set(addr); }
-
-    libzcash::SpendingKey Get() const;
+    DATA_TYPE Get() const;
 };
 
 /** base58-encoded Bitcoin addresses.
@@ -127,6 +131,7 @@ public:
 class CBitcoinAddress : public CBase58Data {
 public:
     bool Set(const CKeyID &id);
+    bool Set(const CPubKey &key);
     bool Set(const CScriptID &id);
     bool Set(const CTxDestination &dest);
     bool IsValid() const;
@@ -141,6 +146,8 @@ public:
 
     CTxDestination Get() const;
     bool GetKeyID(CKeyID &keyID) const;
+    bool GetKeyID_NoCheck(CKeyID& keyID) const;
+    bool GetIndexKey(uint160& hashBytes, int& type) const;
     bool IsScript() const;
 };
 
@@ -172,7 +179,7 @@ public:
     K GetKey() {
         K ret;
         if (vchData.size() == Size) {
-            //if base58 encouded data not holds a ext key, return a !IsValid() key
+            //if base58 encoded data not holds a ext key, return a !IsValid() key
             ret.Decode(&vchData[0]);
         }
         return ret;

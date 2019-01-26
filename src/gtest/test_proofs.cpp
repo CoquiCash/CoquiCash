@@ -3,10 +3,9 @@
 
 #include <iostream>
 
-#include "libsnark/common/default_types/r1cs_ppzksnark_pp.hpp"
-#include "libsnark/zk_proof_systems/ppzksnark/r1cs_ppzksnark/r1cs_ppzksnark.hpp"
-#include "zk_proof_systems/ppzksnark/r1cs_ppzksnark/r1cs_ppzksnark.hpp"
-#include "relations/constraint_satisfaction_problems/r1cs/examples/r1cs_examples.hpp"
+#include <libsnark/common/default_types/r1cs_ppzksnark_pp.hpp>
+#include <libsnark/relations/constraint_satisfaction_problems/r1cs/examples/r1cs_examples.hpp>
+#include <libsnark/zk_proof_systems/ppzksnark/r1cs_ppzksnark/r1cs_ppzksnark.hpp>
 
 using namespace libzcash;
 
@@ -21,6 +20,51 @@ typedef libsnark::default_r1cs_ppzksnark_pp::Fqe_type curve_Fq2;
 #include "streams.h"
 #include "version.h"
 #include "utilstrencodings.h"
+
+TEST(proofs, g1_pairing_at_infinity)
+{
+    for (size_t i = 0; i < 100; i++) {
+        auto r1 = curve_G1::random_element();
+        auto r2 = curve_G2::random_element();
+        ASSERT_TRUE(
+            curve_pp::reduced_pairing(curve_G1::zero(), r2) ==
+            curve_GT::one()
+        );
+        ASSERT_TRUE(
+            curve_pp::final_exponentiation(
+                curve_pp::double_miller_loop(
+                    curve_pp::precompute_G1(curve_G1::zero()),
+                    curve_pp::precompute_G2(r2),
+                    curve_pp::precompute_G1(curve_G1::zero()),
+                    curve_pp::precompute_G2(r2)
+                )
+            ) ==
+            curve_GT::one()
+        );
+        ASSERT_TRUE(
+            curve_pp::final_exponentiation(
+                curve_pp::double_miller_loop(
+                    curve_pp::precompute_G1(r1),
+                    curve_pp::precompute_G2(r2),
+                    curve_pp::precompute_G1(curve_G1::zero()),
+                    curve_pp::precompute_G2(r2)
+                )
+            ) ==
+            curve_pp::reduced_pairing(r1, r2)
+        );
+        ASSERT_TRUE(
+            curve_pp::final_exponentiation(
+                curve_pp::double_miller_loop(
+                    curve_pp::precompute_G1(curve_G1::zero()),
+                    curve_pp::precompute_G2(r2),
+                    curve_pp::precompute_G1(r1),
+                    curve_pp::precompute_G2(r2)
+                )
+            ) ==
+            curve_pp::reduced_pairing(r1, r2)
+        );
+    }
+}
 
 TEST(proofs, g2_subgroup_check)
 {
@@ -197,7 +241,7 @@ TEST(proofs, sqrt_fq2)
 
 TEST(proofs, size_is_expected)
 {
-    ZCProof p;
+    PHGRProof p;
     CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
     ss << p;
 
@@ -400,7 +444,7 @@ TEST(proofs, zksnark_serializes_properly)
     auto vkprecomp = libsnark::r1cs_ppzksnark_verifier_process_vk(kp.vk);
 
     for (size_t i = 0; i < 20; i++) {
-        auto badproof = ZCProof::random_invalid();
+        auto badproof = PHGRProof::random_invalid();
         auto proof = badproof.to_libsnark_proof<libsnark::r1cs_ppzksnark_proof<curve_pp>>();
         
         auto verifierEnabled = ProofVerifier::Strict();
@@ -452,12 +496,12 @@ TEST(proofs, zksnark_serializes_properly)
             proof
         ));
 
-        ZCProof compressed_proof_0(proof);
+        PHGRProof compressed_proof_0(proof);
 
         CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
         ss << compressed_proof_0;
 
-        ZCProof compressed_proof_1;
+        PHGRProof compressed_proof_1;
         ss >> compressed_proof_1;
 
         ASSERT_TRUE(compressed_proof_0 == compressed_proof_1);

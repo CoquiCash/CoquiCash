@@ -2,17 +2,29 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+/******************************************************************************
+ * Copyright © 2014-2019 The SuperNET Developers.                             *
+ *                                                                            *
+ * See the AUTHORS, DEVELOPER-AGREEMENT and LICENSE files at                  *
+ * the top-level directory of this distribution for the individual copyright  *
+ * holder information and the developer policies on copyright and licensing.  *
+ *                                                                            *
+ * Unless otherwise agreed in a custom licensing agreement, no part of the    *
+ * SuperNET software, including this file may be copied, modified, propagated *
+ * or distributed except according to the terms contained in the LICENSE file *
+ *                                                                            *
+ * Removal or modification of this copyright notice is prohibited.            *
+ *                                                                            *
+ ******************************************************************************/
+
 #include "base58.h"
 
-#include "hash.h"
-#include "uint256.h"
-
-#include "version.h"
-#include "streams.h"
+#include <hash.h>
+#include <uint256.h>
 
 #include <assert.h>
-#include <stdint.h>
 #include <string.h>
+#include <stdint.h>
 #include <vector>
 #include <string>
 #include <boost/variant/apply_visitor.hpp>
@@ -104,7 +116,7 @@ std::string EncodeBase58(const unsigned char* pbegin, const unsigned char* pend)
 
 std::string EncodeBase58(const std::vector<unsigned char>& vch)
 {
-    return EncodeBase58(&vch[0], &vch[0] + vch.size());
+    return EncodeBase58(vch.data(), vch.data() + vch.size());
 }
 
 bool DecodeBase58(const std::string& str, std::vector<unsigned char>& vchRet)
@@ -142,6 +154,7 @@ bool DecodeBase58Check(const std::string& str, std::vector<unsigned char>& vchRe
 {
     return DecodeBase58Check(str.c_str(), vchRet);
 }
+
 
 CBase58Data::CBase58Data()
 {
@@ -215,6 +228,7 @@ public:
     CBitcoinAddressVisitor(CBitcoinAddress* addrIn) : addr(addrIn) {}
 
     bool operator()(const CKeyID& id) const { return addr->Set(id); }
+    bool operator()(const CPubKey& key) const { return addr->Set(key); }
     bool operator()(const CScriptID& id) const { return addr->Set(id); }
     bool operator()(const CNoDestination& no) const { return false; }
 };
@@ -223,6 +237,13 @@ public:
 
 bool CBitcoinAddress::Set(const CKeyID& id)
 {
+    SetData(Params().Base58Prefix(CChainParams::PUBKEY_ADDRESS), &id, 20);
+    return true;
+}
+
+bool CBitcoinAddress::Set(const CPubKey& key)
+{
+    CKeyID id = key.GetID();
     SetData(Params().Base58Prefix(CChainParams::PUBKEY_ADDRESS), &id, 20);
     return true;
 }
@@ -275,10 +296,35 @@ CTxDestination CBitcoinAddress::Get() const
         return CNoDestination();
 }
 
+bool CBitcoinAddress::GetIndexKey(uint160& hashBytes, int& type) const
+{
+    if (!IsValid()) {
+        return false;
+    } else if (vchVersion == Params().Base58Prefix(CChainParams::PUBKEY_ADDRESS)) {
+        memcpy(&hashBytes, &vchData[0], 20);
+        type = 1;
+        return true;
+    } else if (vchVersion == Params().Base58Prefix(CChainParams::SCRIPT_ADDRESS)) {
+        memcpy(&hashBytes, &vchData[0], 20);
+        type = 2;
+        return true;
+    }
+
+    return false;
+}
+
 bool CBitcoinAddress::GetKeyID(CKeyID& keyID) const
 {
     if (!IsValid() || vchVersion != Params().Base58Prefix(CChainParams::PUBKEY_ADDRESS))
         return false;
+    uint160 id;
+    memcpy(&id, &vchData[0], 20);
+    keyID = CKeyID(id);
+    return true;
+}
+
+bool CBitcoinAddress::GetKeyID_NoCheck(CKeyID& keyID) const
+{
     uint160 id;
     memcpy(&id, &vchData[0], 20);
     keyID = CKeyID(id);
@@ -323,67 +369,36 @@ bool CBitcoinSecret::SetString(const std::string& strSecret)
     return SetString(strSecret.c_str());
 }
 
-bool CZCPaymentAddress::Set(const libzcash::PaymentAddress& addr)
+template<class DATA_TYPE, CChainParams::Base58Type PREFIX, size_t SER_SIZE>
+bool CZCEncoding<DATA_TYPE, PREFIX, SER_SIZE>::Set(const DATA_TYPE& addr)
 {
     CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
     ss << addr;
     std::vector<unsigned char> addrSerialized(ss.begin(), ss.end());
-    assert(addrSerialized.size() == libzcash::SerializedPaymentAddressSize);
-    SetData(Params().Base58Prefix(CChainParams::ZCPAYMENT_ADDRRESS), &addrSerialized[0], libzcash::SerializedPaymentAddressSize);
+    assert(addrSerialized.size() == SER_SIZE);
+    SetData(Params().Base58Prefix(PREFIX), &addrSerialized[0], SER_SIZE);
     return true;
 }
 
-libzcash::PaymentAddress CZCPaymentAddress::Get() const
+template<class DATA_TYPE, CChainParams::Base58Type PREFIX, size_t SER_SIZE>
+DATA_TYPE CZCEncoding<DATA_TYPE, PREFIX, SER_SIZE>::Get() const
 {
-    if (vchData.size() != libzcash::SerializedPaymentAddressSize) {
+    if (vchData.size() != SER_SIZE) {
         throw std::runtime_error(
-            "payment address is invalid"
+            PrependName(" is invalid")
         );
     }
 
-    if (vchVersion != Params().Base58Prefix(CChainParams::ZCPAYMENT_ADDRRESS)) {
+    if (vchVersion != Params().Base58Prefix(PREFIX)) {
         throw std::runtime_error(
-            "payment address is for wrong network type"
+            PrependName(" is for wrong network type")
         );
     }
 
     std::vector<unsigned char> serialized(vchData.begin(), vchData.end());
 
     CDataStream ss(serialized, SER_NETWORK, PROTOCOL_VERSION);
-    libzcash::PaymentAddress ret;
+    DATA_TYPE ret;
     ss >> ret;
     return ret;
 }
-
-bool CZCSpendingKey::Set(const libzcash::SpendingKey& addr)
-{
-    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
-    ss << addr;
-    std::vector<unsigned char> addrSerialized(ss.begin(), ss.end());
-    assert(addrSerialized.size() == libzcash::SerializedSpendingKeySize);
-    SetData(Params().Base58Prefix(CChainParams::ZCSPENDING_KEY), &addrSerialized[0], libzcash::SerializedSpendingKeySize);
-    return true;
-}
-
-libzcash::SpendingKey CZCSpendingKey::Get() const
-{
-    if (vchData.size() != libzcash::SerializedSpendingKeySize) {
-        throw std::runtime_error(
-            "spending key is invalid"
-        );
-    }
-
-    if (vchVersion != Params().Base58Prefix(CChainParams::ZCSPENDING_KEY)) {
-        throw std::runtime_error(
-            "spending key is for wrong network type"
-        );
-    }
-
-    std::vector<unsigned char> serialized(vchData.begin(), vchData.end());
-
-    CDataStream ss(serialized, SER_NETWORK, PROTOCOL_VERSION);
-    libzcash::SpendingKey ret;
-    ss >> ret;
-    return ret;
-}
-
