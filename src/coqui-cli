@@ -1,0 +1,4 @@
+#!/bin/bash
+cd ~/komodo/src
+./komodo-cli -ac_name=COQUI $@
+
