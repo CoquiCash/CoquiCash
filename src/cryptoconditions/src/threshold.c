@@ -17,8 +17,8 @@
 #include "asn/Fulfillment.h"
 #include "asn/ThresholdFingerprintContents.h"
 #include "asn/OCTET_STRING.h"
-#include "include/cJSON.h"
-#include "cryptoconditions.h"
+//#include <cJSON.h>
+//#include "../include/cryptoconditions.h"
 #include "internal.h"
 
 
@@ -94,17 +94,15 @@ static int cmpConditionBin(const void *a, const void *b) {
 }
 
 
-static unsigned char *thresholdFingerprint(const CC *cond) {
-    /* Create fingerprint */
+static void thresholdFingerprint(const CC *cond, uint8_t *out) {
     ThresholdFingerprintContents_t *fp = calloc(1, sizeof(ThresholdFingerprintContents_t));
-    //fprintf(stderr,"thresholdfinger %p\n",fp);
     fp->threshold = cond->threshold;
     for (int i=0; i<cond->size; i++) {
         Condition_t *asnCond = asnConditionNew(cond->subconditions[i]);
         asn_set_add(&fp->subconditions2, asnCond);
     }
     qsort(fp->subconditions2.list.array, cond->size, sizeof(Condition_t*), cmpConditionBin);
-    return hashFingerprintContents(&asn_DEF_ThresholdFingerprintContents, fp);
+    hashFingerprintContents(&asn_DEF_ThresholdFingerprintContents, fp, out);
 }
 
 

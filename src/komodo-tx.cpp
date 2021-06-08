@@ -47,6 +47,8 @@ using namespace std;
 
 #include "komodo_interest.h"
 
+CKey NSPV_key;
+char NSPV_pubkeystr[67],NSPV_wifstr[64];
 uint64_t komodo_accrued_interest(int32_t *txheightp,uint32_t *locktimep,uint256 hash,int32_t n,int32_t checkheight,uint64_t checkvalue,int32_t tipheight)
 {
     return(0);
@@ -198,6 +200,17 @@ int32_t komodo_nextheight()
     return(100000000);
 }
 
+// stub to allow to link
+int32_t komodo_currentheight()
+{
+    return(100000000);
+}
+
+// stub to allow to link
+uint32_t GetLatestTimestamp(int32_t)
+{
+    return 0L;
+}
 
 // Set default values of new CMutableTransaction based on consensus rules at given height.
 CMutableTransaction CreateNewContextualCMutableTransaction(const Consensus::Params& consensusParams, int nHeight)

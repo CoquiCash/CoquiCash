@@ -17,19 +17,18 @@
 #include "asn/Fulfillment.h"
 #include "asn/Ed25519FingerprintContents.h"
 #include "asn/OCTET_STRING.h"
-#include "include/cJSON.h"
+//#include <cJSON.h>
 #include "include/ed25519/src/ed25519.h"
-#include "cryptoconditions.h"
+//#include "../include/cryptoconditions.h"
 
 
 struct CCType CC_Ed25519Type;
 
 
-static unsigned char *ed25519Fingerprint(const CC *cond) {
+static void ed25519Fingerprint(const CC *cond, uint8_t *out) {
     Ed25519FingerprintContents_t *fp = calloc(1, sizeof(Ed25519FingerprintContents_t));
-    //fprintf(stderr,"ed25519 fingerprint %p %p\n",fp,cond->publicKey);
     OCTET_STRING_fromBuf(&fp->publicKey, cond->publicKey, 32);
-    return hashFingerprintContents(&asn_DEF_Ed25519FingerprintContents, fp);
+    hashFingerprintContents(&asn_DEF_Ed25519FingerprintContents, fp, out);
 }
 
 

@@ -89,20 +89,80 @@ std::string DecodeDumpString(const std::string &str) {
     return ret.str();
 }
 
-UniValue importprivkey(const UniValue& params, bool fHelp)
+UniValue convertpassphrase(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    if (fHelp || params.size() < 1 || params.size() > 1)
+        throw runtime_error(
+            "convertpassphrase \"agamapassphrase\"\n"
+            "\nConverts Agama passphrase to a private key and WIF (for import with importprivkey).\n"
+            "\nArguments:\n"
+            "1. \"agamapassphrase\"   (string, required) Agama passphrase\n"
+            "\nResult:\n"
+            "\"agamapassphrase\": \"agamapassphrase\",   (string) Agama passphrase you entered\n"
+            "\"address\": \"komodoaddress\",             (string) Address corresponding to your passphrase\n"
+            "\"pubkey\": \"publickeyhex\",               (string) The hex value of the raw public key\n"
+            "\"privkey\": \"privatekeyhex\",             (string) The hex value of the raw private key\n"
+            "\"wif\": \"wif\"                            (string) The private key in WIF format to use with 'importprivkey'\n"
+            "\nExamples:\n"
+            + HelpExampleCli("convertpassphrase", "\"agamapassphrase\"")
+            + HelpExampleRpc("convertpassphrase", "\"agamapassphrase\"")
+        );
+
+    bool fCompressed = true;
+    string strAgamaPassphrase = params[0].get_str();
+
+    UniValue ret(UniValue::VOBJ);
+    ret.push_back(Pair("agamapassphrase", strAgamaPassphrase));
+
+    CKey tempkey = DecodeSecret(strAgamaPassphrase);
+    /* first we should check if user pass wif to method, instead of passphrase */
+    if (!tempkey.IsValid()) {
+        /* it's a passphrase, not wif */
+        uint256 sha256;
+        CSHA256().Write((const unsigned char *)strAgamaPassphrase.c_str(), strAgamaPassphrase.length()).Finalize(sha256.begin());
+        std::vector<unsigned char> privkey(sha256.begin(), sha256.begin() + sha256.size());
+        privkey.front() &= 0xf8;
+        privkey.back()  &= 0x7f;
+        privkey.back()  |= 0x40;
+        CKey key;
+        key.Set(privkey.begin(),privkey.end(), fCompressed);
+        CPubKey pubkey = key.GetPubKey();
+        assert(key.VerifyPubKey(pubkey));
+        CKeyID vchAddress = pubkey.GetID();
+
+        ret.push_back(Pair("address", EncodeDestination(vchAddress)));
+        ret.push_back(Pair("pubkey", HexStr(pubkey)));
+        ret.push_back(Pair("privkey", HexStr(privkey)));
+        ret.push_back(Pair("wif", EncodeSecret(key)));
+    } else {
+        /* seems it's a wif */
+        CPubKey pubkey = tempkey.GetPubKey();
+        assert(tempkey.VerifyPubKey(pubkey));
+        CKeyID vchAddress = pubkey.GetID();
+        ret.push_back(Pair("address", EncodeDestination(vchAddress)));
+        ret.push_back(Pair("pubkey", HexStr(pubkey)));
+        ret.push_back(Pair("privkey", HexStr(tempkey)));
+        ret.push_back(Pair("wif", strAgamaPassphrase));
+    }
+
+    return ret;
+}
+
+UniValue importprivkey(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() < 1 || params.size() > 4)
+    if (fHelp || params.size() < 1 || params.size() > 5)
         throw runtime_error(
-            "importprivkey \"komodoprivkey\" ( \"label\" rescan height)\n"
+            "importprivkey \"komodoprivkey\" ( \"label\" rescan height secret_key)\n"
             "\nAdds a private key (as returned by dumpprivkey) to your wallet.\n"
             "\nArguments:\n"
             "1. \"komodoprivkey\"   (string, required) The private key (see dumpprivkey)\n"
             "2. \"label\"            (string, optional, default=\"\") An optional label\n"
             "3. rescan               (boolean, optional, default=true) Rescan the wallet for transactions\n"
             "4. height               (integer, optional, default=0) start at block height?\n"
+            "5. secret_key           (integer, optional, default=188) used to import WIFs of other coins\n" 
             "\nNote: This call can take minutes to complete if rescan is true.\n"
             "\nExamples:\n"
             "\nDump a private key\n"
@@ -115,6 +175,10 @@ UniValue importprivkey(const UniValue& params, bool fHelp)
             + HelpExampleRpc("importprivkey", "\"mykey\", \"testing\", false") +
             "\nImport with rescan from a block height\n"
             + HelpExampleCli("importprivkey", "\"mykey\" \"testing\" true 1000") +
+            "\nImport a BTC WIF with rescan\n"
+            + HelpExampleCli("importprivkey", "\"BTCWIF\" \"testing\" true 0 128") +
+            "\nImport a BTC WIF without rescan\n"
+            + HelpExampleCli("importprivkey", "\"BTCWIF\" \"testing\" false 0 128") +
             "\nAs a JSON-RPC call\n"
             + HelpExampleRpc("importprivkey", "\"mykey\", \"testing\", true, 1000")
         );
@@ -126,6 +190,8 @@ UniValue importprivkey(const UniValue& params, bool fHelp)
     string strSecret = params[0].get_str();
     string strLabel = "";
     int32_t height = 0;
+    uint8_t secret_key = 0;
+    CKey key;
     if (params.size() > 1)
         strLabel = params[1].get_str();
 
@@ -136,10 +202,18 @@ UniValue importprivkey(const UniValue& params, bool fHelp)
     if ( fRescan && params.size() == 4 )
         height = params[3].get_int();
 
+
+    if (params.size() > 4)
+    {
+        auto secret_key = AmountFromValue(params[4])/100000000;
+        key = DecodeCustomSecret(strSecret, secret_key);
+    } else {
+        key = DecodeSecret(strSecret);
+    }
+
     if ( height < 0 || height > chainActive.Height() )
         throw JSONRPCError(RPC_WALLET_ERROR, "Rescan height is out of range.");
     
-    CKey key = DecodeSecret(strSecret);
     if (!key.IsValid()) throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key encoding");
 
     CPubKey pubkey = key.GetPubKey();
@@ -170,7 +244,42 @@ UniValue importprivkey(const UniValue& params, bool fHelp)
     return EncodeDestination(vchAddress);
 }
 
-UniValue importaddress(const UniValue& params, bool fHelp)
+
+void ImportAddress(const CTxDestination& dest, const string& strLabel);
+void ImportScript(const CScript& script, const string& strLabel, bool isRedeemScript)
+{
+    if (!isRedeemScript && ::IsMine(*pwalletMain, script) == ISMINE_SPENDABLE)
+        throw JSONRPCError(RPC_WALLET_ERROR, "The wallet already contains the private key for this address or script");
+
+    pwalletMain->MarkDirty();
+
+    if (!pwalletMain->HaveWatchOnly(script) && !pwalletMain->AddWatchOnly(script))
+        throw JSONRPCError(RPC_WALLET_ERROR, "Error adding address to wallet");
+
+    if (isRedeemScript) {
+        const CScriptID id(script);
+        if (!pwalletMain->HaveCScript(id) && !pwalletMain->AddCScript(script)) {
+            throw JSONRPCError(RPC_WALLET_ERROR, "Error adding p2sh redeemScript to wallet");
+        }
+        ImportAddress(id, strLabel);
+    } else {
+        CTxDestination destination;
+        if (ExtractDestination(script, destination)) {
+            pwalletMain->SetAddressBook(destination, strLabel, "receive");
+        }
+    }
+}
+
+void ImportAddress(const CTxDestination& dest, const string& strLabel)
+{
+    CScript script = GetScriptForDestination(dest);
+    ImportScript(script, strLabel, false);
+    // add to address book or update label
+    if (IsValidDestination(dest))
+        pwalletMain->SetAddressBook(dest, strLabel, "receive");
+}
+
+UniValue importaddress(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
@@ -243,7 +352,7 @@ UniValue importaddress(const UniValue& params, bool fHelp)
     return NullUniValue;
 }
 
-UniValue z_importwallet(const UniValue& params, bool fHelp)
+UniValue z_importwallet(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
@@ -266,7 +375,7 @@ UniValue z_importwallet(const UniValue& params, bool fHelp)
 	return importwallet_impl(params, fHelp, true);
 }
 
-UniValue importwallet(const UniValue& params, bool fHelp)
+UniValue importwallet(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
@@ -398,7 +507,7 @@ UniValue importwallet_impl(const UniValue& params, bool fHelp, bool fImportZKeys
     return NullUniValue;
 }
 
-UniValue dumpprivkey(const UniValue& params, bool fHelp)
+UniValue dumpprivkey(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
@@ -440,7 +549,7 @@ UniValue dumpprivkey(const UniValue& params, bool fHelp)
 
 
 
-UniValue z_exportwallet(const UniValue& params, bool fHelp)
+UniValue z_exportwallet(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
@@ -461,7 +570,7 @@ UniValue z_exportwallet(const UniValue& params, bool fHelp)
 	return dumpwallet_impl(params, fHelp, true);
 }
 
-UniValue dumpwallet(const UniValue& params, bool fHelp)
+UniValue dumpwallet(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
@@ -598,7 +707,7 @@ UniValue dumpwallet_impl(const UniValue& params, bool fHelp, bool fDumpZKeys)
 }
 
 
-UniValue z_importkey(const UniValue& params, bool fHelp)
+UniValue z_importkey(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
@@ -689,7 +798,7 @@ UniValue z_importkey(const UniValue& params, bool fHelp)
     return NullUniValue;
 }
 
-UniValue z_importviewingkey(const UniValue& params, bool fHelp)
+UniValue z_importviewingkey(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
@@ -807,7 +916,7 @@ UniValue z_importviewingkey(const UniValue& params, bool fHelp)
     return NullUniValue;
 }
 
-UniValue z_exportkey(const UniValue& params, bool fHelp)
+UniValue z_exportkey(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
@@ -846,7 +955,7 @@ UniValue z_exportkey(const UniValue& params, bool fHelp)
     return EncodeSpendingKey(sk.get());
 }
 
-UniValue z_exportviewingkey(const UniValue& params, bool fHelp)
+UniValue z_exportviewingkey(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
@@ -896,4 +1005,484 @@ UniValue z_exportviewingkey(const UniValue& params, bool fHelp)
     }
 
     return EncodeViewingKey(vk);
+}
+
+extern int32_t KOMODO_NSPV,KOMODO_DEX_P2P;
+#ifndef KOMODO_NSPV_FULLNODE
+#define KOMODO_NSPV_FULLNODE (KOMODO_NSPV <= 0)
+#endif // !KOMODO_NSPV_FULLNODE
+#ifndef KOMODO_NSPV_SUPERLITE
+#define KOMODO_NSPV_SUPERLITE (KOMODO_NSPV > 0)
+#endif // !KOMODO_NSPV_SUPERLITE
+uint256 zeroid;
+UniValue NSPV_getinfo_req(int32_t reqht);
+UniValue NSPV_login(char *wifstr);
+UniValue NSPV_logout();
+UniValue NSPV_addresstxids(char *coinaddr,int32_t CCflag,int32_t skipcount,int32_t filter);
+UniValue NSPV_addressutxos(char *coinaddr,int32_t CCflag,int32_t skipcount,int32_t filter);
+UniValue NSPV_mempooltxids(char *coinaddr,int32_t CCflag,uint8_t funcid,uint256 txid,int32_t vout);
+UniValue NSPV_broadcast(char *hex);
+UniValue NSPV_spend(char *srcaddr,char *destaddr,int64_t satoshis);
+UniValue NSPV_spentinfo(uint256 txid,int32_t vout);
+UniValue NSPV_notarizations(int32_t height);
+UniValue NSPV_hdrsproof(int32_t prevheight,int32_t nextheight);
+UniValue NSPV_txproof(int32_t vout,uint256 txid,int32_t height);
+UniValue NSPV_ccmoduleutxos(char *coinaddr, int64_t amount, uint8_t evalcode, std::string funcids, uint256 filtertxid);
+
+UniValue komodo_DEXbroadcast(uint64_t *locatorp,uint8_t funcid,char *hexstr,int32_t priority,char *tagA,char *tagB,char *destpub33,char *volA,char *volB);
+UniValue komodo_DEXlist(uint32_t stopat,int32_t minpriority,char *tagA,char *tagB,char *destpub33,char *minA,char *maxA,char *minB,char *maxB,char *stophashstr);
+UniValue komodo_DEXorderbook(int32_t revflag,int32_t maxentries,int32_t minpriority,char *tagA,char *tagB,char *destpub33,char *minA,char *maxA,char *minB,char *maxB);
+UniValue komodo_DEXget(uint32_t shorthash);
+UniValue komodo_DEXpublish(char *fname,int32_t priority,int32_t sliceid);
+UniValue komodo_DEXsubscribe(int32_t &cmpflag,char *fname,int32_t priority,uint32_t shorthash,char *publisher,int32_t sliceid);
+UniValue komodo_DEXstream(char *fname,int32_t priority);
+UniValue komodo_DEXstreamsub(char *fname,int32_t priority,char *pubkeystr);
+UniValue komodo_DEXcancel(char *pubkeystr,uint32_t shorthash,char *tagA,char *tagB);
+UniValue komodo_DEXanonsend(char *message,int32_t priority,char *destpub33);
+UniValue komodo_DEX_notarize(char *coin,int32_t height);
+int32_t is_hexstr(char *str,int32_t n);
+int32_t decode_hex(uint8_t *bytes,int32_t n,char *hex);
+void komodo_DEX_pubkeyupdate();
+
+UniValue komodo_DEX_stats(void);
+uint256 Parseuint256(const char *hexstr);
+extern std::string NSPV_address,NOTARY_PUBKEY;
+extern uint8_t NOTARY_PUBKEY33[33];
+
+UniValue DEX_broadcast(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    UniValue result(UniValue::VOBJ); int32_t priority = 0; char *hexstr,*tagA=(char *)"",*tagB=(char *)"",*destpub33=(char *)"",*volA=(char *)"",*volB=(char *)"";
+    if ( fHelp || params.size() == 0 || params.size() > 7 )
+        throw runtime_error("DEX_broadcast hex [priority [tagA [tagB [pubkey33 [volA [volB]]]]]]\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_broadcast\n");
+    if ( params.size() > 6 )
+        volB = (char *)params[6].get_str().c_str();
+    if ( params.size() > 5 )
+        volA = (char *)params[5].get_str().c_str();
+    if ( params.size() > 4 )
+        destpub33 = (char *)params[4].get_str().c_str();
+    if ( params.size() > 3 )
+        tagB = (char *)params[3].get_str().c_str();
+    if ( params.size() > 2 )
+        tagA = (char *)params[2].get_str().c_str();
+    if ( params.size() > 1 )
+        priority = atol((char *)params[1].get_str().c_str());
+    hexstr = (char *)params[0].get_str().c_str();
+    if ( 0 && strcmp(hexstr,"ffff") == 0 )
+    {
+        if ( tagA[0] == 0 )
+            tagA = (char *)"base";
+        if ( tagB[0] == 0 )
+            tagB = (char *)"rel";
+    }
+    result = komodo_DEXbroadcast(0,'Q',hexstr,priority,tagA,tagB,destpub33,volA,volB);
+    if ( strcmp(hexstr,"ffff") == 0 )
+    {
+        UniValue silentresult;
+        return(silentresult);
+    }
+    return(result);
+}
+
+UniValue DEX_notarize(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    int32_t height; char *coin;
+    if ( fHelp || params.size() == 0 || params.size() > 2 )
+        throw runtime_error("DEX_notarize coin height\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_notarize\n");
+    if ( strncmp(ASSETCHAINS_SYMBOL,"DPOW",4) != 0 )
+        throw runtime_error("only DPOW chains have DEX_notarize\n");
+    if ( params.size() > 1 )
+        height = atol((char *)params[1].get_str().c_str());
+    coin = (char *)params[0].get_str().c_str();
+    return(komodo_DEX_notarize(coin,height));
+}
+
+UniValue DEX_anonsend(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    UniValue result(UniValue::VOBJ); int32_t priority = 0; char *message,*destpub33=(char *)"";
+    if ( fHelp || params.size() == 0 || params.size() > 3 )
+        throw runtime_error("DEX_anonsend message priority destpub33\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_anonsend\n");
+    if ( params.size() > 2 )
+        destpub33 = (char *)params[2].get_str().c_str();
+    if ( params.size() > 1 )
+        priority = atol((char *)params[1].get_str().c_str());
+    message = (char *)params[0].get_str().c_str();
+    return(komodo_DEXanonsend(message,priority,destpub33));
+}
+
+UniValue DEX_list(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    uint32_t stopat = 0; int32_t minpriority = 0; char *tagA=(char *)"",*tagB=(char *)"",*destpub33=(char *)"",*minA=(char *)"",*minB=(char *)"",*maxA=(char *)"",*maxB=(char *)"",*stophashstr=(char *)"";
+    if ( fHelp || params.size() == 0 || params.size() > 10 )
+        throw runtime_error("DEX_list stopat minpriority tagA tagB pubkey33 [minA maxA minB maxB [stophash]]\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_list\n");
+    if ( params.size() > 9 )
+        stophashstr = (char *)params[9].get_str().c_str();
+    if ( params.size() > 8 )
+        maxB = (char *)params[8].get_str().c_str();
+    if ( params.size() > 7 )
+        minB = (char *)params[7].get_str().c_str();
+    if ( params.size() > 6 )
+        maxA = (char *)params[6].get_str().c_str();
+    if ( params.size() > 5 )
+        minA = (char *)params[5].get_str().c_str();
+    if ( params.size() > 4 )
+        destpub33 = (char *)params[4].get_str().c_str();
+    if ( params.size() > 3 )
+        tagB = (char *)params[3].get_str().c_str();
+    if ( params.size() > 2 )
+        tagA = (char *)params[2].get_str().c_str();
+    if ( params.size() > 1 )
+        minpriority = atol((char *)params[1].get_str().c_str());
+    if ( params.size() > 0 )
+        stopat = atol((char *)params[0].get_str().c_str());
+    return(komodo_DEXlist(stopat,minpriority,tagA,tagB,destpub33,minA,maxA,minB,maxB,stophashstr));
+}
+
+UniValue DEX_orderbook(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    UniValue result(UniValue::VOBJ); int32_t maxentries=10,minpriority=0; char *tagA=(char *)"",*tagB=(char *)"",*destpub33=(char *)"",*minA=(char *)"",*minB=(char *)"",*maxA=(char *)"",*maxB=(char *)"";
+    if ( fHelp || params.size() == 0 || params.size() > 9 )
+        throw runtime_error("DEX_orderbook maxentries minpriority tagA tagB pubkey33 [minA maxA minB maxB]\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_orderbook\n");
+    if ( params.size() > 8 )
+        maxB = (char *)params[8].get_str().c_str();
+    if ( params.size() > 7 )
+        minB = (char *)params[7].get_str().c_str();
+    if ( params.size() > 6 )
+        maxA = (char *)params[6].get_str().c_str();
+    if ( params.size() > 5 )
+        minA = (char *)params[5].get_str().c_str();
+    if ( params.size() > 4 )
+        destpub33 = (char *)params[4].get_str().c_str();
+    if ( params.size() > 3 )
+        tagB = (char *)params[3].get_str().c_str();
+    if ( params.size() > 2 )
+        tagA = (char *)params[2].get_str().c_str();
+    if ( params.size() > 1 )
+        minpriority = atol((char *)params[1].get_str().c_str());
+    if ( params.size() > 0 )
+        maxentries = atol((char *)params[0].get_str().c_str());
+    result.push_back(Pair((char *)"asks",komodo_DEXorderbook(0,maxentries,minpriority,tagA,tagB,destpub33,minA,maxA,minB,maxB)));
+    result.push_back(Pair((char *)"bids",komodo_DEXorderbook(1,maxentries,minpriority,tagB,tagA,destpub33,minB,maxB,minA,maxA)));
+    result.push_back(Pair((char *)"base",tagA));
+    result.push_back(Pair((char *)"rel",tagB));
+    return(result);
+}
+
+UniValue DEX_cancel(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    uint32_t shorthash=0; char *tagA=(char *)"",*tagB=(char *)"",*pubkeystr=(char *)"";
+    if ( fHelp || params.size() == 0 || params.size() > 4 )
+        throw runtime_error("DEX_cancel id [pubkey33 [tagA tagB]]\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_cancel\n");
+    if ( params.size() > 3 )
+        tagB = (char *)params[3].get_str().c_str();
+    if ( params.size() > 2 )
+        tagA = (char *)params[2].get_str().c_str();
+    if ( params.size() > 1 )
+        pubkeystr = (char *)params[1].get_str().c_str();
+    if ( params.size() > 0 )
+        shorthash = atol((char *)params[0].get_str().c_str());
+    return(komodo_DEXcancel(pubkeystr,shorthash,tagA,tagB));
+}
+
+UniValue DEX_get(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    uint32_t id=0;
+    if ( fHelp || params.size() == 0 || params.size() > 1 )
+        throw runtime_error("DEX_get id\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_get\n");
+    if ( params.size() > 0 )
+        id = atol((char *)params[0].get_str().c_str());
+    return(komodo_DEXget(id));
+}
+
+UniValue DEX_publish(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    char *fname=(char *)"testfile"; int32_t sliceid=0,priority=0;
+    if ( fHelp || params.size() > 3 )
+        throw runtime_error("DEX_publish filename priority sliceid\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_publish\n");
+    if ( params.size() > 2 )
+        sliceid = atol((char *)params[2].get_str().c_str());
+    if ( params.size() > 1 )
+        priority = atol((char *)params[1].get_str().c_str());
+    if ( params.size() > 0 )
+        fname = (char *)params[0].get_str().c_str();
+    return(komodo_DEXpublish(fname,priority,sliceid));
+}
+
+UniValue DEX_subscribe(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    char *fname=(char *)"testfile",*publisher=(char *)""; uint32_t id; int32_t cmpflag,priority=0;
+    if ( fHelp || params.size() < 3 || params.size() > 4 )
+        throw runtime_error("DEX_subscribe filename priority id [publisher33]\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_subscribe\n");
+    if ( params.size() > 3 )
+        publisher = (char *)params[3].get_str().c_str();
+    if ( params.size() > 2 )
+        id = atol((char *)params[2].get_str().c_str());
+    if ( params.size() > 1 )
+        priority = atol((char *)params[1].get_str().c_str());
+    if ( params.size() > 0 )
+        fname = (char *)params[0].get_str().c_str();
+    return(komodo_DEXsubscribe(cmpflag,fname,priority,id,publisher,0));
+}
+
+UniValue DEX_stream(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    char *fname=(char *)"testfile"; int32_t priority=0;
+    if ( fHelp || params.size() > 2 )
+        throw runtime_error("DEX_stream filename priority\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_stream\n");
+    if ( params.size() > 1 )
+        priority = atol((char *)params[1].get_str().c_str());
+    if ( params.size() > 0 )
+        fname = (char *)params[0].get_str().c_str();
+    return(komodo_DEXstream(fname,priority));
+}
+
+UniValue DEX_streamsub(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    char *fname=(char *)"testfile",*publisher=(char *)""; int32_t priority=0;
+    if ( fHelp || params.size() > 3 )
+        throw runtime_error("DEX_streamsub filename priority pubkey\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_streamsub\n");
+    if ( params.size() > 2 )
+        publisher = (char *)params[2].get_str().c_str();
+   if ( params.size() > 1 )
+        priority = atol((char *)params[1].get_str().c_str());
+    if ( params.size() > 0 )
+        fname = (char *)params[0].get_str().c_str();
+    return(komodo_DEXstreamsub(fname,priority,publisher));
+}
+
+UniValue DEX_stats(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    if ( fHelp || params.size() != 0 )
+        throw runtime_error("DEX_stats\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_stats\n");
+   return(komodo_DEX_stats());
+}
+
+UniValue DEX_setpubkey(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    UniValue p; int32_t n;
+    if ( fHelp || params.size() != 1 )
+        throw runtime_error("DEX_setpubkey pubkey33\n");
+    if ( KOMODO_DEX_P2P == 0 )
+        throw runtime_error("only -dexp2p nodes have DEX_setpubkey\n");
+    if ( is_hexstr((char *)params[0].get_str().c_str(),0) != 66 )
+        throw runtime_error("must be 33 bytes of hex\n");
+    decode_hex(NOTARY_PUBKEY33,33,(char *)params[0].get_str().c_str());
+    NOTARY_PUBKEY = params[0].get_str();
+    komodo_DEX_pubkeyupdate();
+    return(DEX_stats(p,false,mypk));
+}
+
+UniValue nspv_getinfo(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    int32_t reqht = 0;
+    if ( fHelp || params.size() > 1 )
+        throw runtime_error("nspv_getinfo [hdrheight]\n");
+    if ( KOMODO_NSPV_FULLNODE )
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+    if ( params.size() == 1 )
+        reqht = atol((char *)params[0].get_str().c_str());
+    return(NSPV_getinfo_req(reqht));
+}
+
+UniValue nspv_logout(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    if ( fHelp || params.size() != 0 )
+        throw runtime_error("nspv_logout\n");
+    if ( KOMODO_NSPV_FULLNODE )
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+    return(NSPV_logout());
+}
+
+UniValue nspv_login(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    if ( fHelp || params.size() != 1 )
+        throw runtime_error("nspv_login wif\n");
+    if ( KOMODO_NSPV_FULLNODE )
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+    return(NSPV_login((char *)params[0].get_str().c_str()));
+}
+
+UniValue nspv_listunspent(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    int32_t skipcount = 0,CCflag = 0;
+    if ( fHelp || params.size() > 3 )
+        throw runtime_error("nspv_listunspent [address [isCC [skipcount]]]\n");
+    if ( KOMODO_NSPV_FULLNODE )
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+    if ( params.size() == 0 )
+    {
+        if ( NSPV_address.size() != 0 )
+            return(NSPV_addressutxos((char *)NSPV_address.c_str(),0,0,0));
+        else throw runtime_error("nspv_listunspent [address [isCC [skipcount]]]\n");
+    }
+    if ( params.size() >= 1 )
+    {
+        if ( params.size() >= 2 )
+            CCflag = atol((char *)params[1].get_str().c_str());
+        if ( params.size() == 3 )
+            skipcount = atol((char *)params[2].get_str().c_str());
+        return(NSPV_addressutxos((char *)params[0].get_str().c_str(),CCflag,skipcount,0));
+    }
+    else throw runtime_error("nspv_listunspent [address [isCC [skipcount]]]\n");
+}
+
+UniValue nspv_mempool(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    int32_t vout = 0,CCflag = 0; uint256 txid; uint8_t funcid; char *coinaddr;
+    memset(&txid,0,sizeof(txid));
+    if ( fHelp || params.size() > 5 )
+        throw runtime_error("nspv_mempool func(0 all, 1 address recv, 2 txid/vout spent, 3 txid inmempool) address isCC [txid vout]]]\n");
+    if ( KOMODO_NSPV_FULLNODE )
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+    funcid = atol((char *)params[0].get_str().c_str());
+    coinaddr = (char *)params[1].get_str().c_str();
+    CCflag = atol((char *)params[2].get_str().c_str());
+    if ( params.size() > 3 )
+    {
+        if ( params.size() != 5 )
+            throw runtime_error("nspv_mempool func(0 all, 1 address recv, 2 txid/vout spent, 3 txid inmempool) address isCC [txid vout]]]\n");
+        txid = Parseuint256((char *)params[3].get_str().c_str());
+        vout = atol((char *)params[4].get_str().c_str());
+    }
+    return(NSPV_mempooltxids(coinaddr,CCflag,funcid,txid,vout));
+}
+
+UniValue nspv_listtransactions(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    int32_t skipcount = 0,CCflag = 0;
+    if ( fHelp || params.size() > 3 )
+        throw runtime_error("nspv_listtransactions [address [isCC [skipcount]]]\n");
+    if ( KOMODO_NSPV_FULLNODE )
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+    if ( params.size() == 0 )
+    {
+        if ( NSPV_address.size() != 0 )
+            return(NSPV_addresstxids((char *)NSPV_address.c_str(),0,0,0));
+        else throw runtime_error("nspv_listtransactions [address [isCC [skipcount]]]\n");
+    }
+    if ( params.size() >= 1 )
+    {
+        if ( params.size() >= 2 )
+            CCflag = atol((char *)params[1].get_str().c_str());
+        if ( params.size() == 3 )
+            skipcount = atol((char *)params[2].get_str().c_str());
+        //fprintf(stderr,"call txids cc.%d skip.%d\n",CCflag,skipcount);
+        return(NSPV_addresstxids((char *)params[0].get_str().c_str(),CCflag,skipcount,0));
+    }
+    else throw runtime_error("nspv_listtransactions [address [isCC [skipcount]]]\n");
+}
+
+UniValue nspv_spentinfo(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    uint256 txid; int32_t vout;
+    if ( fHelp || params.size() != 2 )
+        throw runtime_error("nspv_spentinfo txid vout\n");
+    if ( KOMODO_NSPV_FULLNODE )
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+    txid = Parseuint256((char *)params[0].get_str().c_str());
+    vout = atol((char *)params[1].get_str().c_str());
+    return(NSPV_spentinfo(txid,vout));
+}
+
+UniValue nspv_notarizations(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    int32_t height;
+    if ( fHelp || params.size() != 1 )
+        throw runtime_error("nspv_notarizations height\n");
+    if ( KOMODO_NSPV_FULLNODE )
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+    height = atol((char *)params[0].get_str().c_str());
+    return(NSPV_notarizations(height));
+}
+
+UniValue nspv_hdrsproof(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    int32_t prevheight,nextheight;
+    if ( fHelp || params.size() != 2 )
+        throw runtime_error("nspv_hdrsproof prevheight nextheight\n");
+    if ( KOMODO_NSPV_FULLNODE )
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+    prevheight = atol((char *)params[0].get_str().c_str());
+    nextheight = atol((char *)params[1].get_str().c_str());
+    return(NSPV_hdrsproof(prevheight,nextheight));
+}
+
+UniValue nspv_txproof(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    uint256 txid; int32_t height;
+    if ( fHelp || params.size() != 2 )
+        throw runtime_error("nspv_txproof txid height\n");
+    if ( KOMODO_NSPV_FULLNODE )
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+    txid = Parseuint256((char *)params[0].get_str().c_str());
+    height = atol((char *)params[1].get_str().c_str());
+    return(NSPV_txproof(0,txid,height));
+}
+
+UniValue nspv_spend(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    uint64_t satoshis;
+    if ( fHelp || params.size() != 2 )
+        throw runtime_error("nspv_spend address amount\n");
+    if ( KOMODO_NSPV_FULLNODE )
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+    if ( NSPV_address.size() == 0 )
+        throw runtime_error("to nspv_send you need an active nspv_login\n");
+    satoshis = atof(params[1].get_str().c_str())*COIN + 0.0000000049;
+    //fprintf(stderr,"satoshis.%lld from %.8f\n",(long long)satoshis,atof(params[1].get_str().c_str()));
+    if ( satoshis < 1000 )
+        throw runtime_error("amount too small\n");
+    return(NSPV_spend((char *)NSPV_address.c_str(),(char *)params[0].get_str().c_str(),satoshis));
+}
+
+UniValue nspv_broadcast(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    if ( fHelp || params.size() != 1 )
+        throw runtime_error("nspv_broadcast hex\n");
+    if ( KOMODO_NSPV_FULLNODE )
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+    return(NSPV_broadcast((char *)params[0].get_str().c_str()));
+}
+
+UniValue nspv_listccmoduleunspent(const UniValue& params, bool fHelp, const CPubKey& mypk)
+{
+    int32_t skipcount = 0, CCflag = 0;
+    if (fHelp || params.size() != 5)
+        throw runtime_error("nspv_listccmoduleunspent address amount evalcode funcids txid\n\n" 
+        "returns utxos from the address, filtered by evalcode funcids and txid in opret.\n"
+        "if amount is 0 just returns no utxos and available total.\n"
+        "funcids is a string of funcid symbols. The first symbol is considered as the creation funcid, so the txid param will be compared to the creation tx id.\n"
+        "For the second+ funcids the txid param will be compared to txid in opreturn\n\n" );
+    if (KOMODO_NSPV_FULLNODE)
+        throw runtime_error("-nSPV=1 must be set to use nspv\n");
+
+    std::string address = params[0].get_str().c_str();
+    int64_t amount = atof(params[1].get_str().c_str());
+    uint8_t evalcode = atol(params[2].get_str().c_str());
+    std::string funcids = params[3].get_str().c_str();
+    uint256 txid = Parseuint256( params[4].get_str().c_str() );
+    return(NSPV_ccmoduleutxos((char*)address.c_str(), amount, evalcode, funcids, txid));
 }

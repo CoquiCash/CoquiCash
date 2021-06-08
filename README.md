@@ -1,6 +1,17 @@
-[![Build Status](https://travis-ci.org/KomodoPlatform/komodo.svg?branch=dev)](https://travis-ci.org/KomodoPlatform/komodo)
+[![Build Status](https://travis-ci.org/KomodoPlatform/komodo.svg?branch=master)](https://travis-ci.org/KomodoPlatform/komodo)
+[![Version](https://img.shields.io/github/v/release/komodoplatform/komodo)](https://github.com/KomodoPlatform/komodo/releases)
+[![Issues](https://img.shields.io/github/issues-raw/komodoplatform/komodo)](https://github.com/KomodoPlatform/komodo/issues)
+[![PRs](https://img.shields.io/github/issues-pr-closed/komodoplatform/komodo)](https://github.com/KomodoPlatform/komodo/pulls)
+[![Commits](https://img.shields.io/github/commit-activity/y/komodoplatform/komodo)](https://github.com/KomodoPlatform/komodo/commits/dev)
+[![Contributors](https://img.shields.io/github/contributors/komodoplatform/komodo)](https://github.com/KomodoPlatform/komodo/graphs/contributors)
+[![Last Commit](https://img.shields.io/github/last-commit/komodoplatform/komodo)](https://github.com/KomodoPlatform/komodo/graphs/commit-activity)
+
+[![gitstars](https://img.shields.io/github/stars/komodoplatform/komodo?style=social)](https://github.com/KomodoPlatform/komodo/stargazers)
+[![twitter](https://img.shields.io/twitter/follow/komodoplatform?style=social)](https://twitter.com/komodoplatform)
+[![discord](https://img.shields.io/discord/412898016371015680)](https://discord.gg/tvp96Gf)
+
 ---
-![Komodo Logo](https://i.imgur.com/vIwVtqv.png "Komodo Logo")
+![Komodo Logo](https://i.imgur.com/E8LtkAa.png "Komodo Logo")
 
 
 ## Komodo
@@ -16,7 +27,7 @@ This is the official Komodo sourcecode repository based on https://github.com/jl
 - Mail: [info@komodoplatform.com](mailto:info@komodoplatform.com)
 - Support: [https://support.komodoplatform.com/support/home](https://support.komodoplatform.com/support/home)
 - Knowledgebase & How-to: [https://support.komodoplatform.com/en/support/solutions](https://support.komodoplatform.com/en/support/solutions)
-- API references & Dev Documentation: [https://docs.komodoplatform.com](https://docs.komodoplatform.com/)
+- API references & Dev Documentation: [https://developers.komodoplatform.com](https://developers.komodoplatform.com/)
 - Blog: [https://blog.komodoplatform.com](https://blog.komodoplatform.com/)
 - Whitepaper: [Komodo Whitepaper](https://komodoplatform.com/whitepaper)
 - Komodo Platform public material: [Komodo Platform public material](https://docs.google.com/document/d/1AbhWrtagu4vYdkl-vsWz-HSNyNvK-W-ZasHCqe7CZy0)
@@ -51,7 +62,7 @@ Komodo is based on Zcash and has been extended by our innovative consensus algor
 
 ```shell
 #The following packages are needed:
-sudo apt-get install build-essential pkg-config libc6-dev m4 g++-multilib autoconf libtool ncurses-dev unzip git python python-zmq zlib1g-dev wget libcurl4-gnutls-dev bsdmainutils automake curl
+sudo apt-get install build-essential pkg-config libc6-dev m4 g++-multilib autoconf libtool ncurses-dev unzip git python python-zmq zlib1g-dev wget libcurl4-gnutls-dev bsdmainutils automake curl libsodium-dev
 ```
 
 ### Build Komodo
@@ -66,8 +77,7 @@ Komodo builds for all operating systems out of the same codebase. Follow the OS 
 git clone https://github.com/komodoplatform/komodo --branch master --single-branch
 cd komodo
 ./zcutil/fetch-params.sh
-# -j8 = using 8 threads for the compilation - replace 8 with number of threads you want to use
-./zcutil/build.sh -j8
+./zcutil/build.sh -j$(expr $(nproc) - 1)
 #This can take some time.
 ```
 
@@ -94,23 +104,27 @@ git clone https://github.com/komodoplatform/komodo --branch master --single-bran
 # Change master branch to other branch you wish to compile
 cd komodo
 ./zcutil/fetch-params.sh
-# -j8 = using 8 threads for the compilation - replace 8 with number of threads you want to use
-./zcutil/build-mac.sh -j8
+./zcutil/build-mac.sh -j$(expr $(sysctl -n hw.ncpu) - 1)
 # This can take some time.
 ```
 
 #### Windows
 Use a debian cross-compilation setup with mingw for windows and run:
 ```shell
-sudo apt-get install build-essential pkg-config libc6-dev m4 g++-multilib autoconf libtool ncurses-dev unzip git python python-zmq zlib1g-dev wget libcurl4-gnutls-dev bsdmainutils automake curl cmake mingw-w64
+sudo apt-get install build-essential pkg-config libc6-dev m4 g++-multilib autoconf libtool ncurses-dev unzip git python python-zmq zlib1g-dev wget libcurl4-gnutls-dev bsdmainutils automake curl cmake mingw-w64 libsodium-dev libevent-dev
 curl https://sh.rustup.rs -sSf | sh
 source $HOME/.cargo/env
 rustup target add x86_64-pc-windows-gnu
+
+sudo update-alternatives --config x86_64-w64-mingw32-gcc
+# (configure to use POSIX variant)
+sudo update-alternatives --config x86_64-w64-mingw32-g++
+# (configure to use POSIX variant)
+
 git clone https://github.com/jl777/komodo --branch master --single-branch
 cd komodo
 ./zcutil/fetch-params.sh
-# -j8 = using 8 threads for the compilation - replace 8 with number of threads you want to use
-./zcutil/build-win.sh -j8
+./zcutil/build-win.sh -j$(expr $(nproc) - 1)
 #This can take some time.
 ```
 **komodo is experimental and a work-in-progress.** Use at your own risk.
@@ -131,13 +145,16 @@ rpcuser=yourrpcusername
 rpcpassword=yoursecurerpcpassword
 rpcbind=127.0.0.1
 txindex=1
-addnode=5.9.102.210
-addnode=78.47.196.146
-addnode=178.63.69.164
-addnode=88.198.65.74
-addnode=5.9.122.241
-addnode=144.76.94.38
-addnode=89.248.166.91
+addnode=77.75.121.138
+addnode=95.213.238.100
+addnode=94.130.148.142
+addnode=103.6.12.105
+addnode=139.99.209.214
+addnode=185.130.212.13
+addnode=5.9.142.219
+addnode=200.25.4.38
+addnode=139.99.136.148
+
 ```
 ### Create your own Blockchain based on Komodo
 

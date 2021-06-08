@@ -16,9 +16,9 @@
 #include "asn/Condition.h"
 #include "asn/Fulfillment.h"
 #include "asn/OCTET_STRING.h"
-#include "include/cJSON.h"
+//#include <cJSON.h>
 #include "include/sha256.h"
-#include "cryptoconditions.h"
+//#include "../include/cryptoconditions.h"
 
 
 struct CCType CC_PreimageType;
@@ -44,11 +44,8 @@ static unsigned long preimageCost(const CC *cond) {
 }
 
 
-static unsigned char *preimageFingerprint(const CC *cond) {
-    unsigned char *hash = calloc(1, 32);
-    //fprintf(stderr,"preimage %p %p\n",hash,cond->preimage);
-    sha256(cond->preimage, cond->preimageLength, hash);
-    return hash;
+static void preimageFingerprint(const CC *cond, uint8_t *out) {
+    sha256(cond->preimage, cond->preimageLength, out);
 }
 
 

@@ -15,10 +15,16 @@
 
 #ifndef KOMODO_DEFS_H
 #define KOMODO_DEFS_H
+
+#include <map>
+#include "arith_uint256.h"
+#include "chain.h"
 #include "komodo_nk.h"
 
+#define KOMODO_EARLYTXID_HEIGHT 100
+//#define ADAPTIVEPOW_CHANGETO_DEFAULTON 1572480000
 #define ASSETCHAINS_MINHEIGHT 128
-#define ASSETCHAINS_MAX_ERAS 3
+#define ASSETCHAINS_MAX_ERAS 7
 #define KOMODO_ELECTION_GAP 2000
 #define ROUNDROBIN_DELAY 61
 #define KOMODO_ASSETCHAIN_MAXLEN 65
@@ -29,7 +35,12 @@
 #define KOMODO_FIRSTFUNGIBLEID 100
 #define KOMODO_SAPLING_ACTIVATION 1544832000 // Dec 15th, 2018
 #define KOMODO_SAPLING_DEADLINE 1550188800 // Feb 15th, 2019
+#define ASSETCHAINS_STAKED_BLOCK_FUTURE_MAX 57
+#define ASSETCHAINS_STAKED_BLOCK_FUTURE_HALF 27
+#define ASSETCHAINS_STAKED_MIN_POW_DIFF 536900000 // 537000000 537300000
 #define _COINBASE_MATURITY 100
+
+#define KOMODO_ADDRESS_BUFSIZE 64
 
 // KMD Notary Seasons 
 // 1: May 1st 2018 1530921600
@@ -38,10 +49,18 @@
     // 1751328000 = dummy timestamp, 1 July 2025!
     // 7113400 = 5x current KMD blockheight. 
 // to add 4th season, change NUM_KMD_SEASONS to 4, and add timestamp and height of activation to these arrays. 
-#define NUM_KMD_SEASONS 3
+
+#define NUM_KMD_SEASONS 5
 #define NUM_KMD_NOTARIES 64
-static const uint32_t KMD_SEASON_TIMESTAMPS[NUM_KMD_SEASONS] = {1525132800, 1563148800, 1751328000};
-static const int32_t KMD_SEASON_HEIGHTS[NUM_KMD_SEASONS] = {814000, 1444000, 7113400};
+
+extern const uint32_t nStakedDecemberHardforkTimestamp; //December 2019 hardfork
+extern const int32_t nDecemberHardforkHeight;   //December 2019 hardfork
+
+extern const uint32_t nS4Timestamp; //dPoW Season 4 2020 hardfork
+extern const int32_t nS4HardforkHeight;   //dPoW Season 4 2020 hardfork
+
+static const uint32_t KMD_SEASON_TIMESTAMPS[NUM_KMD_SEASONS] = {1525132800, 1563148800, nStakedDecemberHardforkTimestamp, nS4Timestamp, 1751328000};
+static const int32_t KMD_SEASON_HEIGHTS[NUM_KMD_SEASONS] = {814000, 1444000, nDecemberHardforkHeight, nS4HardforkHeight, 7113400};
 
 // Era array of pubkeys. Add extra seasons to bottom as requried, after adding appropriate info above. 
 static const char *notaries_elected[NUM_KMD_SEASONS][NUM_KMD_NOTARIES][2] =
@@ -243,7 +262,141 @@ static const char *notaries_elected[NUM_KMD_SEASONS][NUM_KMD_NOTARIES][2] =
         {"gt_AR", "0348430538a4944d3162bb4749d8c5ed51299c2434f3ee69c11a1f7815b3f46135" },
         {"patchkez_SH", "03f45e9beb5c4cd46525db8195eb05c1db84ae7ef3603566b3d775770eba3b96ee" },
         {"decker_AR", "03ffdf1a116300a78729608d9930742cd349f11a9d64fcc336b8f18592dd9c91bc" }, // 63
-    }
+    },
+    {
+        // Season 3.5
+        {"madmax_NA", "0237e0d3268cebfa235958808db1efc20cc43b31100813b1f3e15cc5aa647ad2c3" }, // 0
+        {"alright_AR", "020566fe2fb3874258b2d3cf1809a5d650e0edc7ba746fa5eec72750c5188c9cc9" },
+        {"strob_NA", "0206f7a2e972d9dfef1c424c731503a0a27de1ba7a15a91a362dc7ec0d0fb47685" },
+        {"hunter_EU", "0378224b4e9d8a0083ce36f2963ec0a4e231ec06b0c780de108e37f41181a89f6a" }, // FIXME verify this, kolo. Change name if you want
+        {"phm87_SH", "021773a38db1bc3ede7f28142f901a161c7b7737875edbb40082a201c55dcf0add" },
+        {"chainmakers_NA", "02285d813c30c0bf7eefdab1ff0a8ad08a07a0d26d8b95b3943ce814ac8e24d885" },
+        {"indenodes_EU", "0221387ff95c44cb52b86552e3ec118a3c311ca65b75bf807c6c07eaeb1be8303c" },
+        {"blackjok3r_SH", "021eac26dbad256cbb6f74d41b10763183ee07fb609dbd03480dd50634170547cc" },
+        {"chainmakers_EU", "03fdf5a3fce8db7dee89724e706059c32e5aa3f233a6b6cc256fea337f05e3dbf7" },
+        {"titomane_AR", "023e3aa9834c46971ff3e7cb86a200ec9c8074a9566a3ea85d400d5739662ee989" },
+        {"fullmoon_SH", "023b7252968ea8a955cd63b9e57dee45a74f2d7ba23b4e0595572138ad1fb42d21" }, // 10
+        {"indenodes_NA", "02698c6f1c9e43b66e82dbb163e8df0e5a2f62f3a7a882ca387d82f86e0b3fa988" },
+        {"chmex_EU", "0281304ebbcc39e4f09fda85f4232dd8dacd668e20e5fc11fba6b985186c90086e" },
+        {"metaphilibert_SH", "0284af1a5ef01503e6316a2ca4abf8423a794e9fc17ac6846f042b6f4adedc3309" },
+        {"ca333_DEV", "02856843af2d9457b5b1c907068bef6077ea0904cc8bd4df1ced013f64bf267958" },
+        {"cipi_NA", "02858904a2a1a0b44df4c937b65ee1f5b66186ab87a751858cf270dee1d5031f18" },
+        {"pungocloud_SH", "024dfc76fa1f19b892be9d06e985d0c411e60dbbeb36bd100af9892a39555018f6" },
+        {"voskcoin_EU", "034190b1c062a04124ad15b0fa56dfdf34aa06c164c7163b6aec0d654e5f118afb" },
+        {"decker_DEV", "028eea44a09674dda00d88ffd199a09c9b75ba9782382cc8f1e97c0fd565fe5707" },
+        {"cryptoeconomy_EU", "0290ab4937e85246e048552df3e9a66cba2c1602db76e03763e16c671e750145d1" },
+        {"etszombi_EU", "0293ea48d8841af7a419a24d9da11c34b39127ef041f847651bae6ab14dcd1f6b4" },  // 20
+        {"karasugoi_NA", "02a348b03b9c1a8eac1b56f85c402b041c9bce918833f2ea16d13452309052a982" },
+        {"pirate_AR", "03e29c90354815a750db8ea9cb3c1b9550911bb205f83d0355a061ac47c4cf2fde" },
+        {"metaphilibert_AR", "02adad675fae12b25fdd0f57250b0caf7f795c43f346153a31fe3e72e7db1d6ac6" },
+        {"zatjum_SH", "02d6b0c89cacd58a0af038139a9a90c9e02cd1e33803a1f15fceabea1f7e9c263a" },
+        {"madmax_AR", "03c5941fe49d673c094bc8e9bb1a95766b4670c88be76d576e915daf2c30a454d3" },
+        {"lukechilds_NA", "03f1051e62c2d280212481c62fe52aab0a5b23c95de5b8e9ad5f80d8af4277a64b" },
+        {"cipi_AR", "02c4f89a5b382750836cb787880d30e23502265054e1c327a5bfce67116d757ce8" },
+        {"tonyl_AR", "02cc8bc862f2b65ad4f99d5f68d3011c138bf517acdc8d4261166b0be8f64189e1" },
+        {"infotech_DEV", "0345ad4ab5254782479f6322c369cec77a7535d2f2162d103d666917d5e4f30c4c" },
+        {"fullmoon_NA", "032c716701fe3a6a3f90a97b9d874a9d6eedb066419209eed7060b0cc6b710c60b" },  // 30
+        {"etszombi_AR", "02e55e104aa94f70cde68165d7df3e162d4410c76afd4643b161dea044aa6d06ce" },
+        {"node-9_EU", "0372e5b51e86e2392bb15039bac0c8f975b852b45028a5e43b324c294e9f12e411" },
+        {"phba2061_EU", "03f6bd15dba7e986f0c976ea19d8a9093cb7c989d499f1708a0386c5c5659e6c4e" },
+        {"indenodes_AR", "02ec0fa5a40f47fd4a38ea5c89e375ad0b6ddf4807c99733c9c3dc15fb978ee147" },
+        {"and1-89_EU", "02736cbf8d7b50835afd50a319f162dd4beffe65f2b1dc6b90e64b32c8e7849ddd" },
+        {"komodopioneers_SH", "032a238a5747777da7e819cfa3c859f3677a2daf14e4dce50916fc65d00ad9c52a" },
+        {"komodopioneers_EU", "036d02425916444fff8cc7203fcbfc155c956dda5ceb647505836bef59885b6866" },
+        {"d0ct0r_NA", "0303725d8525b6f969122faf04152653eb4bf34e10de92182263321769c334bf58" },
+        {"kolo_DEV", "02849e12199dcc27ba09c3902686d2ad0adcbfcee9d67520e9abbdda045ba83227" },
+        {"peer2cloud_AR", "02acc001fe1fe8fd68685ba26c0bc245924cb592e10cec71e9917df98b0e9d7c37" }, // 40
+        {"webworker01_SH", "031e50ba6de3c16f99d414bb89866e578d963a54bde7916c810608966fb5700776" },
+        {"webworker01_NA", "032735e9cad1bb00eaababfa6d27864fa4c1db0300c85e01e52176be2ca6a243ce" },
+        {"pbca26_NA", "03a97606153d52338bcffd1bf19bb69ef8ce5a7cbdc2dbc3ff4f89d91ea6bbb4dc" },
+        {"indenodes_SH", "0334e6e1ec8285c4b85bd6dae67e17d67d1f20e7328efad17ce6fd24ae97cdd65e" },
+        {"pirate_NA", "0255e32d8a56671dee8aa7f717debb00efa7f0086ee802de0692f2d67ee3ee06ee" },
+        {"lukechilds_AR", "025c6a73ff6d750b9ddf6755b390948cffdd00f344a639472d398dd5c6b4735d23" },
+        {"dragonhound_NA", "0224a9d951d3a06d8e941cc7362b788bb1237bb0d56cc313e797eb027f37c2d375" },
+        {"fullmoon_AR", "03da64dd7cd0db4c123c2f79d548a96095a5a103e5b9d956e9832865818ffa7872" },
+        {"chainzilla_SH", "0360804b8817fd25ded6e9c0b50e3b0782ac666545b5416644198e18bc3903d9f9" },
+        {"titomane_EU", "03772ac0aad6b0e9feec5e591bff5de6775d6132e888633e73d3ba896bdd8e0afb" }, // 50
+        {"jeezy_EU", "037f182facbad35684a6e960699f5da4ba89e99f0d0d62a87e8400dd086c8e5dd7" },
+        {"titomane_SH", "03850fdddf2413b51790daf51dd30823addb37313c8854b508ea6228205047ef9b" },
+        {"alien_AR", "03911a60395801082194b6834244fa78a3c30ff3e888667498e157b4aa80b0a65f" },
+        {"pirate_EU", "03fff24efd5648870a23badf46e26510e96d9e79ce281b27cfe963993039dd1351" },
+        {"thegaltmines_NA", "02db1a16c7043f45d6033ccfbd0a51c2d789b32db428902f98b9e155cf0d7910ed" },
+        {"computergenie_NA", "03a78ae070a5e9e935112cf7ea8293f18950f1011694ea0260799e8762c8a6f0a4" },
+        {"nutellalicka_SH", "02f7d90d0510c598ce45915e6372a9cd0ba72664cb65ce231f25d526fc3c5479fc" },
+        {"chainstrike_SH", "03b806be3bf7a1f2f6290ec5c1ea7d3ea57774dcfcf2129a82b2569e585100e1cb" },
+        {"hunter_SH", "02407db70ad30ce4dfaee8b4ae35fae88390cad2b0ba0373fdd6231967537ccfdf" }, // FIXME verify this, Decker. Change name if you want
+        {"alien_EU", "03bb749e337b9074465fa28e757b5aa92cb1f0fea1a39589bca91a602834d443cd" }, // 60
+        {"gt_AR", "0348430538a4944d3162bb4749d8c5ed51299c2434f3ee69c11a1f7815b3f46135" },
+        {"patchkez_SH", "03f45e9beb5c4cd46525db8195eb05c1db84ae7ef3603566b3d775770eba3b96ee" },
+        {"decker_AR", "03ffdf1a116300a78729608d9930742cd349f11a9d64fcc336b8f18592dd9c91bc" }, // 63
+    },
+    {
+        // Season 4
+        { "alien_AR", "03911a60395801082194b6834244fa78a3c30ff3e888667498e157b4aa80b0a65f" },
+        { "alien_EU", "03bb749e337b9074465fa28e757b5aa92cb1f0fea1a39589bca91a602834d443cd" },
+        { "strob_NA", "02a1c0bd40b294f06d3e44a52d1b2746c260c475c725e9351f1312e49e01c9a405" },
+        { "titomane_SH", "020014ad4eedf6b1aeb0ad3b101a58d0a2fc570719e46530fd98d4e585f63eb4ae" },
+        { "fullmoon_AR", "03b251095e747f759505ec745a4bbff9a768b8dce1f65137300b7c21efec01a07a" },
+        { "phba2061_EU", "03a9492d2a1601d0d98cfe94d8adf9689d1bb0e600088127a4f6ca937761fb1c66" },
+        { "fullmoon_NA", "03931c1d654a99658998ce0ddae108d825943a821d1cddd85e948ac1d483f68fb6" },
+        { "fullmoon_SH", "03c2a1ed9ddb7bb8344328946017b9d8d1357b898957dd6aaa8c190ae26740b9ff" },
+        { "madmax_AR", "022be5a2829fa0291f9a51ff7aeceef702eef581f2611887c195e29da49092e6de" },
+        { "titomane_EU", "0285cf1fdba761daf6f1f611c32d319cd58214972ef822793008b69dde239443dd" },
+        { "cipi_NA", "022c6825a24792cc3b010b1531521eba9b5e2662d640ed700fd96167df37e75239" },
+        { "indenodes_SH", "0334e6e1ec8285c4b85bd6dae67e17d67d1f20e7328efad17ce6fd24ae97cdd65e" },
+        { "decker_AR", "03ffdf1a116300a78729608d9930742cd349f11a9d64fcc336b8f18592dd9c91bc" },
+        { "indenodes_EU", "0221387ff95c44cb52b86552e3ec118a3c311ca65b75bf807c6c07eaeb1be8303c" },
+        { "madmax_NA", "02997b7ab21b86bbea558ae79acc35d62c9cedf441578f78112f986d72e8eece08" },
+        { "chainzilla_SH", "02288ba6dc57936b59d60345e397d62f5d7e7d975f34ed5c2f2e23288325661563" },
+        { "peer2cloud_AR", "0250e7e43a3535731b051d1bcc7dc88fbb5163c3fe41c5dee72bd973bcc4dca9f2" },
+        { "pirate_EU", "0231c0f50a06655c3d2edf8d7e722d290195d49c78d50de7786b9d196e8820c848" },
+        { "webworker01_NA", "02dfd5f3cef1142879a7250752feb91ddd722c497fb98c7377c0fcc5ccc201bd55" },
+        { "zatjum_SH", "036066fd638b10e555597623e97e032b28b4d1fa5a13c2b0c80c420dbddad236c2" },
+        { "titomane_AR", "0268203a4c80047edcd66385c22e764ea5fb8bc42edae389a438156e7dca9a8251" },
+        { "chmex_EU", "025b7209ba37df8d9695a23ea706ea2594863ab09055ca6bf485855937f3321d1d" },
+        { "indenodes_NA", "02698c6f1c9e43b66e82dbb163e8df0e5a2f62f3a7a882ca387d82f86e0b3fa988" },
+        { "patchkez_SH", "02cabd6c5fc0b5476c7a01e9d7b907e9f0a051d7f4f731959955d3f6b18ee9a242" },
+        { "metaphilibert_AR", "02adad675fae12b25fdd0f57250b0caf7f795c43f346153a31fe3e72e7db1d6ac6" },
+        { "etszombi_EU", "0341adbf238f33a33cc895633db996c3ad01275313ac6641e046a3db0b27f1c880" },
+        { "pirate_NA", "02207f27a13625a0b8caef6a7bb9de613ff16e4a5f232da8d7c235c7c5bad72ffe" },
+        { "metaphilibert_SH", "0284af1a5ef01503e6316a2ca4abf8423a794e9fc17ac6846f042b6f4adedc3309" },
+        { "indenodes_AR", "02ec0fa5a40f47fd4a38ea5c89e375ad0b6ddf4807c99733c9c3dc15fb978ee147" },
+        { "chainmakers_NA", "029415a1609c33dfe4a1016877ba35f9265d25d737649f307048efe96e76512877" },
+        { "mihailo_EU", "037f9563f30c609b19fd435a19b8bde7d6db703012ba1aba72e9f42a87366d1941" },
+        { "tonyl_AR", "0299684d7291abf90975fa493bf53212cf1456c374aa36f83cc94daece89350ae9" },
+        { "alien_NA", "03bea1ac333b95c8669ec091907ea8713cae26f74b9e886e13593400e21c4d30a8" },
+        { "pungocloud_SH", "025b97d8c23effaca6fa7efacce20bf54df73081b63004a0fe22f3f98fece5669f" },
+        { "node9_EU", "029ffa793b5c3248f8ea3da47fa3cf1810dada5af032ecd0e37bab5b92dd63b34e" },
+        { "smdmitry_AR", "022a2a45979a6631a25e4c96469423de720a2f4c849548957c35a35c91041ee7ac" },
+        { "nodeone_NA", "03f9dd0484e81174fd50775cb9099691c7d140ff00c0f088847e38dc87da67eb9b" },
+        { "gcharang_SH", "02ec4172eab854a0d8cd32bc691c83e93975a3df5a4a453a866736c56e025dc359" },
+        { "cipi_EU", "02f2b6defff1c544202f66e47cfd6909c54d67c7c39b9c2a99f137dbaf6d0bd8fa" },
+        { "etszombi_AR", "0329944b0ac65b6760787ede042a2fde0be9fca1d80dd756bc0ee0b98d389b7682" },
+        { "pbca26_NA", "0387e0fb6f2ca951154c87e16c6cbf93a69862bb165c1a96bcd8722b3af24fe533" },
+        { "mylo_SH", "03b58f57822e90fe105e6efb63fd8666033ea503d6cc165b1e479bbd8c2ba033e8" },
+        { "swisscertifiers_EU", "03ebcc71b42d88994b8b2134bcde6cb269bd7e71a9dd7616371d9294ec1c1902c5" },
+        { "marmarachain_AR", "035bbd81a098172592fe97f50a0ce13cbbf80e55cc7862eccdbd7310fab8a90c4c" },
+        { "karasugoi_NA", "0262cf2559703464151153c12e00c4b67a969e39b330301fdcaa6667d7eb02c57d" },
+        { "phm87_SH", "021773a38db1bc3ede7f28142f901a161c7b7737875edbb40082a201c55dcf0add" },
+        { "oszy_EU", "03d1ffd680491b98a3ec5541715681d1a45293c8efb1722c32392a1d792622596a" },
+        { "chmex_AR", "036c856ea778ea105b93c0be187004d4e51161eda32888aa307b8f72d490884005" },
+        { "dragonhound_NA", "0227e5cad3731e381df157de189527aac8eb50d82a13ce2bd81153984ebc749515" },
+        { "strob_SH", "025ceac4256cef83ca4b110f837a71d70a5a977ecfdf807335e00bc78b560d451a" },
+        { "madmax_EU", "02ea0cf4d6d151d0528b07efa79cc7403d77cb9195e2e6c8374f5074b9a787e287" },
+        { "dudezmobi_AR", "027ecd974ff2a27a37ee69956cd2e6bb31a608116206f3e31ef186823420182450" },
+        { "daemonfox_NA", "022d6f4885f53cbd668ad7d03d4f8e830c233f74e3a918da1ed247edfc71820b3d" },
+        { "nutellalicka_SH", "02f4b1e71bc865a79c05fe333952b97cb040d8925d13e83925e170188b3011269b" },
+        { "starfleet_EU", "025c7275bd750936862b47793f1f0bb3cbed60fb75a48e7da016e557925fe375eb" },
+        { "mrlynch_AR", "031987dc82b087cd53e23df5480e265a5928e9243e0e11849fa12359739d8b18a4" },
+        { "greer_NA", "03e0995615d7d3cf1107effa6bdb1133e0876cf1768e923aa533a4e2ee675ec383" },
+        { "mcrypt_SH", "025faab3cc2e83bf7dad6a9463cbff86c08800e937942126f258cf219bc2320043" },
+        { "decker_EU", "03777777caebce56e17ca3aae4e16374335b156f1dd62ee3c7f8799c6b885f5560" },
+        { "dappvader_SH", "02962e2e5af746632016bc7b24d444f7c90141a5f42ce54e361b302cf455d90e6a" },
+        { "alright_DEV", "02b73a589d61691efa2ada15c006d27bc18493fea867ce6c14db3d3d28751f8ce3" },
+        { "artemii235_DEV", "03bb616b12430bdd0483653de18733597a4fd416623c7065c0e21fe9d96460add1" },
+        { "tonyl_DEV", "02d5f7fd6e25d34ab2f3318d60cdb89ff3a812ec5d0212c4c113bb12d12616cfdc" },
+        { "decker_DEV", "028eea44a09674dda00d88ffd199a09c9b75ba9782382cc8f1e97c0fd565fe5707" }
+   }
 };
 
 #define SETBIT(bits,bitoffset) (((uint8_t *)bits)[(bitoffset) >> 3] |= (1 << ((bitoffset) & 7)))
@@ -254,13 +407,14 @@ static const char *notaries_elected[NUM_KMD_SEASONS][NUM_KMD_NOTARIES][2] =
 #define KOMODO_BIT63SET(x) ((x) & ((uint64_t)1 << 63))
 #define KOMODO_VALUETOOBIG(x) ((x) > (uint64_t)10000000001*COIN)
 
-//#ifndef TESTMODE
-#define PRICES_DAYWINDOW ((3600*24/ASSETCHAINS_BLOCKTIME) + 1)
-//#else
-//#define PRICES_DAYWINDOW (7)
-//#endif
+#ifdef TESTMODE_PRICES
+    #define PRICES_DAYWINDOW (7)
+#else
+    #define PRICES_DAYWINDOW ((3600*24/ASSETCHAINS_BLOCKTIME) + 1)
+#endif
 
 extern uint8_t ASSETCHAINS_TXPOW,ASSETCHAINS_PUBLIC;
+extern int8_t ASSETCHAINS_ADAPTIVEPOW;
 int32_t MAX_BLOCK_SIZE(int32_t height);
 extern char ASSETCHAINS_SYMBOL[KOMODO_ASSETCHAIN_MAXLEN];
 extern uint16_t ASSETCHAINS_P2PPORT,ASSETCHAINS_RPCPORT;
@@ -271,41 +425,43 @@ extern uint64_t ASSETCHAINS_SUPPLY, ASSETCHAINS_FOUNDERS_REWARD;
 extern uint64_t ASSETCHAINS_TIMELOCKGTE;
 extern uint32_t ASSETCHAINS_ALGO, ASSETCHAINS_VERUSHASH,ASSETCHAINS_EQUIHASH,KOMODO_INITDONE;
 
-extern int32_t KOMODO_MININGTHREADS,KOMODO_LONGESTCHAIN,ASSETCHAINS_SEED,IS_KOMODO_NOTARY,USE_EXTERNAL_PUBKEY,KOMODO_CHOSEN_ONE,KOMODO_ON_DEMAND,KOMODO_PASSPORT_INITDONE,ASSETCHAINS_STAKED;
+extern int32_t KOMODO_MININGTHREADS,KOMODO_LONGESTCHAIN,ASSETCHAINS_SEED,IS_KOMODO_NOTARY,USE_EXTERNAL_PUBKEY,KOMODO_CHOSEN_ONE,KOMODO_ON_DEMAND,KOMODO_PASSPORT_INITDONE,ASSETCHAINS_STAKED,KOMODO_NSPV;
 extern uint64_t ASSETCHAINS_COMMISSION, ASSETCHAINS_LASTERA,ASSETCHAINS_CBOPRET;
 extern bool VERUS_MINTBLOCKS;
-extern uint64_t ASSETCHAINS_REWARD[ASSETCHAINS_MAX_ERAS], ASSETCHAINS_NOTARY_PAY[ASSETCHAINS_MAX_ERAS], ASSETCHAINS_TIMELOCKGTE, ASSETCHAINS_NONCEMASK[],ASSETCHAINS_NK[2];
+extern uint64_t ASSETCHAINS_REWARD[ASSETCHAINS_MAX_ERAS+1], ASSETCHAINS_NOTARY_PAY[ASSETCHAINS_MAX_ERAS+1], ASSETCHAINS_TIMELOCKGTE, ASSETCHAINS_NONCEMASK[],ASSETCHAINS_NK[2];
 extern const char *ASSETCHAINS_ALGORITHMS[];
 extern int32_t VERUS_MIN_STAKEAGE;
 extern uint32_t ASSETCHAINS_VERUSHASH, ASSETCHAINS_VERUSHASHV1_1, ASSETCHAINS_NONCESHIFT[], ASSETCHAINS_HASHESPERROUND[];
 extern std::string NOTARY_PUBKEY,ASSETCHAINS_OVERRIDE_PUBKEY,ASSETCHAINS_SCRIPTPUB;
 extern uint8_t NOTARY_PUBKEY33[33],ASSETCHAINS_OVERRIDE_PUBKEY33[33],ASSETCHAINS_MARMARA;
-extern std::vector<std::string> ASSETCHAINS_PRICES,ASSETCHAINS_STOCKS;
+//extern std::vector<std::string> ASSETCHAINS_PRICES,ASSETCHAINS_STOCKS;
 
 extern int32_t VERUS_BLOCK_POSUNITS, VERUS_CONSECUTIVE_POS_THRESHOLD, VERUS_NOPOS_THRESHHOLD;
 extern uint256 KOMODO_EARLYTXID;
 
-extern int32_t KOMODO_CONNECTING,KOMODO_CCACTIVATE,KOMODO_DEALERNODE;
+extern int32_t KOMODO_CONNECTING,KOMODO_CCACTIVATE,KOMODO_DEALERNODE,KOMODO_DEX_P2P;
 extern uint32_t ASSETCHAINS_CC;
 extern std::string CCerror,ASSETCHAINS_CCLIB;
-extern uint8_t ASSETCHAINS_CCDISABLES[256];
+extern uint8_t ASSETCHAINS_CCDISABLES[256],ASSETCHAINS_CCZEROTXFEE[256];
 
 extern int32_t USE_EXTERNAL_PUBKEY;
-extern std::string NOTARY_PUBKEY;
+extern std::string NOTARY_PUBKEY,NOTARY_ADDRESS;
 extern int32_t KOMODO_EXCHANGEWALLET;
 extern int32_t VERUS_MIN_STAKEAGE;
 extern std::string DONATION_PUBKEY;
 extern uint8_t ASSETCHAINS_PRIVATE;
 extern int32_t USE_EXTERNAL_PUBKEY;
-extern char NOTARYADDRS[64][64]; // should be depreciated later. Only affects labs.
+extern char NOTARYADDRS[64][64];
 extern char NOTARY_ADDRESSES[NUM_KMD_SEASONS][64][64];
-extern int32_t KOMODO_TESTNODE, KOMODO_SNAPSHOT_INTERVAL;
+extern int32_t KOMODO_TESTNODE, KOMODO_SNAPSHOT_INTERVAL,IS_STAKED_NOTARY,STAKED_ERA;
 extern int32_t ASSETCHAINS_EARLYTXIDCONTRACT;
+extern int32_t ASSETCHAINS_STAKED_SPLIT_PERCENTAGE;
 int tx_height( const uint256 &hash );
 extern std::vector<std::string> vWhiteListAddress;
 extern std::map <std::int8_t, int32_t> mapHeightEvalActivate;
 void komodo_netevent(std::vector<uint8_t> payload);
 int32_t getacseason(uint32_t timestamp);
+int32_t getkmdseason(int32_t height);
 
 #define IGUANA_MAXSCRIPTSIZE 10001
 #define KOMODO_KVDURATION 1440
@@ -331,10 +487,52 @@ int64_t komodo_priceave(int64_t *tmpbuf,int64_t *correlated,int32_t cskip);
 int64_t komodo_pricecorrelated(uint64_t seed,int32_t ind,uint32_t *rawprices,int32_t rawskip,uint32_t *nonzprices,int32_t smoothwidth);
 int32_t komodo_nextheight();
 uint32_t komodo_heightstamp(int32_t height);
-int64_t komodo_pricemult(int32_t ind);
+int64_t komodo_pricemult_to10e8(int32_t ind);
 int32_t komodo_priceget(int64_t *buf64,int32_t ind,int32_t height,int32_t numblocks);
 uint64_t komodo_accrued_interest(int32_t *txheightp,uint32_t *locktimep,uint256 hash,int32_t n,int32_t checkheight,uint64_t checkvalue,int32_t tipheight);
 int32_t komodo_currentheight();
+int32_t komodo_notarized_bracket(struct notarized_checkpoint *nps[2],int32_t height);
+arith_uint256 komodo_adaptivepow_target(int32_t height,arith_uint256 bnTarget,uint32_t nTime);
+bool komodo_hardfork_active(uint32_t time);
+int32_t komodo_newStakerActive(int32_t height, uint32_t timestamp);
 
+CBlockIndex *komodo_getblockindex(uint256 hash);
+uint256 Parseuint256(const char *hexstr);
+void komodo_sendmessage(int32_t minpeers, int32_t maxpeers, const char *message, std::vector<uint8_t> payload);
+CBlockIndex *komodo_getblockindex(uint256 hash);
+int32_t komodo_nextheight();
+CBlockIndex *komodo_blockindex(uint256 hash);
+CBlockIndex *komodo_chainactive(int32_t height);
+int32_t komodo_blockheight(uint256 hash);
+int64_t komodo_get_blocktime(uint256 hash);
+bool komodo_txnotarizedconfirmed(uint256 txid,int32_t minconfirms=1);
+int32_t komodo_blockload(CBlock& block, CBlockIndex *pindex);
+uint32_t komodo_chainactive_timestamp();
+uint32_t GetLatestTimestamp(int32_t height);
+
+#ifndef KOMODO_NSPV_FULLNODE
+#define KOMODO_NSPV_FULLNODE (KOMODO_NSPV <= 0)
+#endif // !KOMODO_NSPV_FULLNODE
+#ifndef KOMODO_NSPV_SUPERLITE
+#define KOMODO_NSPV_SUPERLITE (KOMODO_NSPV > 0)
+#endif // !KOMODO_NSPV_SUPERLITE
+
+struct komodo_staking
+{
+    char address[64];
+    uint256 txid;
+    arith_uint256 hashval;
+    uint64_t nValue;
+    uint32_t segid32, txtime;
+    int32_t vout;
+    CScript scriptPubKey;
+};
+struct komodo_staking *komodo_addutxo(struct komodo_staking *array, int32_t *numkp, int32_t *maxkp, uint32_t txtime, uint64_t nValue, uint256 txid, int32_t vout, char *address, uint8_t *hashbuf, CScript pk);
+void komodo_createminerstransactions();
+uint32_t komodo_segid32(char *coinaddr);
+
+#ifndef _WIN32
+void OS_randombytes(unsigned char *x, long xlen);
+#endif
 
 #endif

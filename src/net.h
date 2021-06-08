@@ -97,6 +97,9 @@ void SocketSendData(CNode *pnode);
 
 typedef int NodeId;
 
+class CNodeStats;
+void CopyNodeStats(std::vector<CNodeStats>& vstats);
+
 struct CombinerAll
 {
     typedef bool result_type;
@@ -205,6 +208,11 @@ public:
     double dPingTime;
     double dPingWait;
     std::string addrLocal;
+    // Address of this peer
+    CAddress addr;
+    // Bind address of our side of the connection
+    // CAddress addrBind; // https://github.com/bitcoin/bitcoin/commit/a7e3c2814c8e49197889a4679461be42254e5c51
+    uint32_t m_mapped_as;
 };
 
 
@@ -276,7 +284,11 @@ public:
     int64_t nLastRecv;
     int64_t nTimeConnected;
     int64_t nTimeOffset;
+    uint32_t prevtimes[16],dexlastping;
+    // Address of this peer
     CAddress addr;
+    // Bind address of our side of the connection
+    // const CAddress addrBind; // https://github.com/bitcoin/bitcoin/commit/a7e3c2814c8e49197889a4679461be42254e5c51
     std::string addrName;
     CService addrLocal;
     int nVersion;
@@ -293,9 +305,6 @@ public:
     bool fNetworkNode;
     bool fSuccessfullyConnected;
     bool fDisconnect;
-    // count blocks seen.
-    int8_t nBlocksinARow;
-    int8_t nBlocksinARow2;
     // We use fRelayTxes for two purposes -
     // a) it allows us to not relay tx invs before receiving the peer's version message
     // b) the peer may tell us in its version message that we should not relay tx invs
@@ -422,7 +431,7 @@ public:
         if (addr.IsValid() && !addrKnown.contains(addr.GetKey())) {
             if (vAddrToSend.size() >= MAX_ADDR_TO_SEND) {
                 vAddrToSend[insecure_rand() % vAddrToSend.size()] = addr;
-            } else {
+            } else { 
                 vAddrToSend.push_back(addr);
             }
         }
@@ -462,6 +471,7 @@ public:
 
     void PushMessage(const char* pszCommand)
     {
+        //fprintf(stderr,"push.(%s)\n",pszCommand);
         try
         {
             BeginMessage(pszCommand);
@@ -477,6 +487,7 @@ public:
     template<typename T1>
     void PushMessage(const char* pszCommand, const T1& a1)
     {
+        //fprintf(stderr,"push.(%s)\n",pszCommand);
         try
         {
             BeginMessage(pszCommand);
@@ -643,7 +654,7 @@ public:
     static bool Unban(const CSubNet &ip);
     static void GetBanned(std::map<CSubNet, int64_t> &banmap);
 
-    void copyStats(CNodeStats &stats);
+    void copyStats(CNodeStats &stats, const std::vector<bool> &m_asmap);
 
     static bool IsWhitelistedRange(const CNetAddr &ip);
     static void AddWhitelistedRange(const CSubNet &subnet);

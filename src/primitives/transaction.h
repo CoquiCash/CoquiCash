@@ -46,6 +46,9 @@
 #include "zcash/Proof.hpp"
 
 extern uint32_t ASSETCHAINS_MAGIC;
+extern std::string ASSETCHAINS_SELFIMPORT;
+extern uint8_t ASSETCHAINS_CCZEROTXFEE[256];
+extern  bool GetOpReturnData(const CScript &sig, std::vector<unsigned char> &data);
 
 // Overwinter transaction version
 static const int32_t OVERWINTER_TX_VERSION = 3;
@@ -709,6 +712,26 @@ public:
     bool IsCoinImport() const
     {
         return (vin.size() == 1 && vin[0].prevout.n == 10e8);
+    }
+
+    bool IsPegsImport() const
+    {
+        return (ASSETCHAINS_SELFIMPORT=="PEGSCC" && vin[0].prevout.n == 10e8);
+    }
+
+    bool IsPriorityCC() const
+    {
+        std::vector<uint8_t> vopret; uint8_t evalcode;
+
+        if (vout.size()<1) return (false);
+        if (vout[vout.size()-1].scriptPubKey.IsOpReturn())
+        {
+            GetOpReturnData(vout[vout.size()-1].scriptPubKey,vopret);
+            evalcode=vopret[0];
+            if (ASSETCHAINS_CCZEROTXFEE[evalcode]) 
+                return (true);
+        }
+        return (false);
     }
 
     friend bool operator==(const CTransaction& a, const CTransaction& b)
